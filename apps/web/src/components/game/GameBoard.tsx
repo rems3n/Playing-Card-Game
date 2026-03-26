@@ -49,6 +49,8 @@ export function GameBoard() {
     socket.emit('game:call_trump', { gameId, suit });
   }, [socket, gameId]);
 
+  const [rulesOpen, setRulesOpen] = useState(false);
+
   if (!gameState) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -56,8 +58,6 @@ export function GameBoard() {
       </div>
     );
   }
-
-  const [rulesOpen, setRulesOpen] = useState(false);
 
   const isMyTurn = gameState.phase === GamePhase.Playing && gameState.currentPlayerSeat === gameState.mySeat;
   const isPassing = gameState.phase === GamePhase.Passing;
