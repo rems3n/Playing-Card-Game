@@ -58,6 +58,7 @@ export default function LobbyPage() {
   const [playMode, setPlayMode] = useState<'ai' | 'online'>('ai');
   const [gameSearch, setGameSearch] = useState('');
   const [gameDropdownOpen, setGameDropdownOpen] = useState(false);
+  const [joinCode, setJoinCode] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown on outside click
@@ -71,7 +72,7 @@ export default function LobbyPage() {
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
-  // Listen for matchmaking events
+  // Listen for matchmaking and room events
   useEffect(() => {
     socket.on('matchmaking:found', ({ gameId }) => {
       setMatchmaking(false);
@@ -83,11 +84,20 @@ export default function LobbyPage() {
       setQueuePosition(position);
     });
 
+    socket.on('room:created', ({ roomId }) => {
+      router.push(`/room/${roomId}`);
+    });
+
     return () => {
       socket.off('matchmaking:found');
       socket.off('matchmaking:waiting');
+      socket.off('room:created');
     };
   }, [socket, setGameId, router]);
+
+  const handleCreateRoom = () => {
+    socket.emit('room:create', { gameType: selectedGame });
+  };
 
   const handlePlayAI = () => {
     setIsCreating(true);
@@ -321,12 +331,40 @@ export default function LobbyPage() {
                 </button>
               </div>
             ) : (
-              <button
-                onClick={handleMatchmaking}
-                className="px-12 py-4 rounded-xl text-lg font-bold bg-[var(--accent-blue)] text-white hover:brightness-110 transition-all shadow-lg shadow-blue-500/20"
-              >
-                Find Match
-              </button>
+              <div className="flex flex-col items-center gap-3">
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleCreateRoom}
+                    className="px-8 py-3 rounded-xl text-base font-bold bg-[var(--accent-green)] text-white hover:brightness-110 transition-all"
+                  >
+                    Create Room
+                  </button>
+                  <button
+                    onClick={handleMatchmaking}
+                    className="px-8 py-3 rounded-xl text-base font-bold bg-[var(--accent-blue)] text-white hover:brightness-110 transition-all"
+                  >
+                    Quick Match
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={joinCode}
+                    onChange={(e) => setJoinCode(e.target.value.trim())}
+                    placeholder="Room code"
+                    maxLength={8}
+                    className="w-32 bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-center font-mono tracking-wider placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-blue)]/50"
+                    onKeyDown={(e) => e.key === 'Enter' && joinCode && router.push(`/room/${joinCode}`)}
+                  />
+                  <button
+                    onClick={() => joinCode && router.push(`/room/${joinCode}`)}
+                    disabled={!joinCode}
+                    className="px-4 py-2 text-sm font-medium border border-[var(--border-subtle)] rounded-lg hover:bg-white/[0.04] disabled:opacity-40 transition-colors"
+                  >
+                    Join
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         </div>

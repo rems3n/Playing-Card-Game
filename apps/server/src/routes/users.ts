@@ -20,40 +20,52 @@ export async function userRoutes(fastify: FastifyInstance): Promise<void> {
       providerId: string;
     };
 
+    // Check if user already exists — preserve their custom display name and avatar
+    const existing = await db.query.users.findFirst({
+      where: eq(users.email, body.email),
+    });
+
     let result;
-    try {
-      result = await db
-        .insert(users)
-        .values({
-          email: body.email,
-          displayName: body.displayName,
-          avatarUrl: body.avatarUrl ?? null,
-          authProvider: body.provider,
-          authProviderId: body.providerId,
-        })
-        .onConflictDoUpdate({
-          target: [users.authProvider, users.authProviderId],
-          set: {
-            displayName: body.displayName,
-            avatarUrl: body.avatarUrl ?? null,
-            lastSeenAt: new Date(),
-          },
-        })
-        .returning();
-    } catch {
-      // If insert fails (e.g. email unique constraint because the authProviderId
-      // was previously stored as the email), fix the existing row's providerId.
+    if (existing) {
+      // Only update lastSeenAt and fill in missing fields
+      const updates: Record<string, unknown> = { lastSeenAt: new Date() };
+      // Only set avatarUrl if user doesn't have one or has a broken local upload URL
+      if (!existing.avatarUrl || existing.avatarUrl.startsWith('/uploads/')) {
+        updates.avatarUrl = body.avatarUrl ?? null;
+      }
+      // Don't overwrite display name if user customized it
+      if (!existing.displayName || existing.displayName === '') {
+        updates.displayName = body.displayName;
+      }
       result = await db
         .update(users)
-        .set({
-          authProvider: body.provider,
-          authProviderId: body.providerId,
-          displayName: body.displayName,
-          avatarUrl: body.avatarUrl ?? null,
-          lastSeenAt: new Date(),
-        })
-        .where(eq(users.email, body.email))
+        .set(updates)
+        .where(eq(users.id, existing.id))
         .returning();
+    } else {
+      try {
+        result = await db
+          .insert(users)
+          .values({
+            email: body.email,
+            displayName: body.displayName,
+            avatarUrl: body.avatarUrl ?? null,
+            authProvider: body.provider,
+            authProviderId: body.providerId,
+          })
+          .returning();
+      } catch {
+        result = await db
+          .update(users)
+          .set({
+            authProvider: body.provider,
+            authProviderId: body.providerId,
+            avatarUrl: body.avatarUrl ?? null,
+            lastSeenAt: new Date(),
+          })
+          .where(eq(users.email, body.email))
+          .returning();
+      }
     }
 
     const user = result[0];

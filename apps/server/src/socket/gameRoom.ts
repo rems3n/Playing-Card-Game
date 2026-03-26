@@ -1,7 +1,10 @@
+import { v4 as uuidv4 } from 'uuid';
 import { Server, Socket } from 'socket.io';
 import type {
   ClientToServerEvents,
   ServerToClientEvents,
+  WaitingRoomState,
+  WaitingRoomPlayer,
 } from '@card-game/shared-types';
 import { GamePhase, AIDifficulty, GameType } from '@card-game/shared-types';
 import { GameService } from '../services/GameService.js';
@@ -21,6 +24,18 @@ const PLAYERS_PER_GAME: Record<string, number> = {
   spades: 4,
   euchre: 4,
 };
+
+// ── Waiting rooms ──
+interface WaitingRoom {
+  id: string;
+  gameType: GameType;
+  hostSocketId: string;
+  hostDisplayName: string;
+  players: Array<{ socketId: string; displayName: string; userId: string | null }>;
+  maxPlayers: number;
+}
+
+const waitingRooms = new Map<string, WaitingRoom>();
 
 export function setupGameHandlers(
   io: GameServer,
@@ -156,6 +171,123 @@ export function setupGameHandlers(
     // ── Cancel matchmaking ──
     socket.on('matchmaking:cancel', async () => {
       await matchmakingService.leaveAllQueues(socket.id);
+    });
+
+    // ── Create a waiting room ──
+    socket.on('room:create', async (data) => {
+      const roomId = uuidv4().slice(0, 8); // short room code
+      const maxPlayers = PLAYERS_PER_GAME[data.gameType] ?? 4;
+
+      const room: WaitingRoom = {
+        id: roomId,
+        gameType: data.gameType as GameType,
+        hostSocketId: socket.id,
+        hostDisplayName: displayName,
+        players: [{ socketId: socket.id, displayName, userId }],
+        maxPlayers,
+      };
+
+      waitingRooms.set(roomId, room);
+      await socket.join(`room:${roomId}`);
+      socket.emit('room:created', { roomId });
+      io.to(`room:${roomId}`).emit('room:update', toRoomState(room));
+    });
+
+    // ── Join a waiting room ──
+    socket.on('room:join', async (data) => {
+      const room = waitingRooms.get(data.roomId);
+      if (!room) {
+        socket.emit('room:error', { message: 'Room not found' });
+        return;
+      }
+      if (room.players.length >= room.maxPlayers) {
+        socket.emit('room:error', { message: 'Room is full' });
+        return;
+      }
+      if (room.players.some((p) => p.socketId === socket.id)) {
+        // Already in room
+        socket.emit('room:update', toRoomState(room));
+        return;
+      }
+
+      room.players.push({ socketId: socket.id, displayName, userId });
+      await socket.join(`room:${room.id}`);
+      io.to(`room:${room.id}`).emit('room:update', toRoomState(room));
+    });
+
+    // ── Leave a waiting room ──
+    socket.on('room:leave', async (data) => {
+      const room = waitingRooms.get(data.roomId);
+      if (!room) return;
+
+      room.players = room.players.filter((p) => p.socketId !== socket.id);
+      socket.leave(`room:${room.id}`);
+
+      if (room.players.length === 0) {
+        waitingRooms.delete(room.id);
+      } else {
+        // If host left, make next player host
+        if (room.hostSocketId === socket.id) {
+          room.hostSocketId = room.players[0].socketId;
+          room.hostDisplayName = room.players[0].displayName;
+        }
+        io.to(`room:${room.id}`).emit('room:update', toRoomState(room));
+      }
+    });
+
+    // ── Host starts the game ──
+    socket.on('room:start', async (data) => {
+      const room = waitingRooms.get(data.roomId);
+      if (!room) {
+        socket.emit('room:error', { message: 'Room not found' });
+        return;
+      }
+      if (room.hostSocketId !== socket.id) {
+        socket.emit('room:error', { message: 'Only the host can start' });
+        return;
+      }
+      if (room.players.length < 2) {
+        socket.emit('room:error', { message: 'Need at least 2 players' });
+        return;
+      }
+
+      // Create the actual game
+      const gameId = gameService.createGame(room.gameType);
+
+      for (const player of room.players) {
+        gameService.joinGame(gameId, player.socketId, player.displayName, player.userId ?? undefined);
+        const playerSocket = io.sockets.sockets.get(player.socketId);
+        if (playerSocket) {
+          await playerSocket.join(gameId);
+        }
+      }
+
+      // Fill remaining seats with AI
+      if (room.players.length < room.maxPlayers) {
+        gameService.fillWithAI(gameId, AIDifficulty.Intermediate);
+      }
+
+      gameService.startGame(gameId);
+
+      // Notify all players
+      io.to(`room:${room.id}`).emit('room:started', { gameId });
+
+      // Send game state to each player
+      for (const player of room.players) {
+        const seat = gameService.getSeatForSocket(gameId, player.socketId);
+        if (seat !== undefined) {
+          const playerSocket = io.sockets.sockets.get(player.socketId);
+          if (playerSocket) {
+            playerSocket.emit('game:state', gameService.getVisibleState(gameId, seat));
+          }
+        }
+      }
+
+      // Clean up room
+      waitingRooms.delete(room.id);
+
+      // Handle AI turns
+      await handleAITurns(io, gameService, gameId);
     });
 
     // ── Join an existing game ──
@@ -340,8 +472,41 @@ export function setupGameHandlers(
 
       // Clean up matchmaking
       await matchmakingService.leaveAllQueues(socket.id);
+
+      // Clean up waiting rooms
+      for (const [roomId, room] of waitingRooms) {
+        const idx = room.players.findIndex((p) => p.socketId === socket.id);
+        if (idx !== -1) {
+          room.players.splice(idx, 1);
+          if (room.players.length === 0) {
+            waitingRooms.delete(roomId);
+          } else {
+            if (room.hostSocketId === socket.id) {
+              room.hostSocketId = room.players[0].socketId;
+              room.hostDisplayName = room.players[0].displayName;
+            }
+            io.to(`room:${roomId}`).emit('room:update', toRoomState(room));
+          }
+        }
+      }
     });
   });
+}
+
+function toRoomState(room: WaitingRoom): WaitingRoomState {
+  return {
+    roomId: room.id,
+    gameType: room.gameType,
+    host: room.hostDisplayName,
+    players: room.players.map((p, i) => ({
+      displayName: p.displayName,
+      avatarUrl: null,
+      isHost: p.socketId === room.hostSocketId,
+      seatIndex: i,
+    })),
+    maxPlayers: room.maxPlayers,
+    fillWithAI: room.players.length < room.maxPlayers,
+  };
 }
 
 async function handleAITurns(

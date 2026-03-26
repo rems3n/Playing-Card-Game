@@ -7,6 +7,24 @@ import type {
   VisibleGameState,
 } from './game.js';
 
+// ── Waiting room types ──
+
+export interface WaitingRoomPlayer {
+  displayName: string;
+  avatarUrl: string | null;
+  isHost: boolean;
+  seatIndex: number;
+}
+
+export interface WaitingRoomState {
+  roomId: string;
+  gameType: GameType;
+  host: string; // display name
+  players: WaitingRoomPlayer[];
+  maxPlayers: number;
+  fillWithAI: boolean;
+}
+
 // ── Client → Server events ──
 
 export interface ClientToServerEvents {
@@ -30,6 +48,15 @@ export interface ClientToServerEvents {
     aiDifficulty?: AIDifficulty;
     fillWithAI?: boolean;
   }) => void;
+
+  // Waiting room
+  'room:create': (data: {
+    gameType: GameType;
+    config?: Partial<GameConfig>;
+  }) => void;
+  'room:join': (data: { roomId: string }) => void;
+  'room:leave': (data: { roomId: string }) => void;
+  'room:start': (data: { roomId: string }) => void;
 
   'invite:send': (data: {
     toUserId: string;
@@ -85,6 +112,12 @@ export interface ServerToClientEvents {
   'matchmaking:waiting': (data: { position: number }) => void;
 
   'lobby:game_created': (data: { gameId: string }) => void;
+
+  // Waiting room
+  'room:created': (data: { roomId: string }) => void;
+  'room:update': (state: WaitingRoomState) => void;
+  'room:started': (data: { gameId: string }) => void;
+  'room:error': (data: { message: string }) => void;
 
   'invite:received': (data: {
     invitationId: string;
