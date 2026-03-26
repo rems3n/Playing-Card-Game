@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useState, useRef } from 'react';
 import { GamePhase, GameType, type Card } from '@card-game/shared-types';
 import { useSocket } from '@/hooks/useSocket';
 import { useGameStore, useSettingsStore } from '@card-game/shared-store';
@@ -50,6 +50,45 @@ export function GameBoard() {
   }, [socket, gameId]);
 
   const [rulesOpen, setRulesOpen] = useState(false);
+  const [disconnectedPlayer, setDisconnectedPlayer] = useState<{ seatIndex: number; secondsLeft: number } | null>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Listen for player disconnect/reconnect
+  useEffect(() => {
+    socket.on('game:player_disconnected', ({ seatIndex, timeoutSeconds }) => {
+      if (timerRef.current) clearInterval(timerRef.current);
+
+      if (timeoutSeconds === 0) {
+        // Timer expired — show choice modal
+        setDisconnectedPlayer({ seatIndex, secondsLeft: 0 });
+      } else {
+        // Start countdown
+        setDisconnectedPlayer({ seatIndex, secondsLeft: timeoutSeconds });
+        timerRef.current = setInterval(() => {
+          setDisconnectedPlayer((prev) => {
+            if (!prev || prev.secondsLeft <= 1) {
+              if (timerRef.current) clearInterval(timerRef.current);
+              return prev ? { ...prev, secondsLeft: 0 } : null;
+            }
+            return { ...prev, secondsLeft: prev.secondsLeft - 1 };
+          });
+        }, 1000);
+      }
+    });
+
+    socket.on('game:player_reconnected', ({ seatIndex }) => {
+      if (disconnectedPlayer?.seatIndex === seatIndex) {
+        if (timerRef.current) clearInterval(timerRef.current);
+        setDisconnectedPlayer(null);
+      }
+    });
+
+    return () => {
+      socket.off('game:player_disconnected');
+      socket.off('game:player_reconnected');
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [socket, disconnectedPlayer?.seatIndex]);
 
   if (!gameState) {
     return (
@@ -103,6 +142,50 @@ export function GameBoard() {
         {error && (
           <div className="px-3 py-2 rounded-lg bg-[var(--accent-red)]/10 border border-[var(--accent-red)]/30 text-[12px] text-[var(--accent-red)]">
             {error}
+          </div>
+        )}
+
+        {/* Player disconnected banner */}
+        {disconnectedPlayer && (
+          <div className="px-4 py-3 rounded-lg bg-[var(--accent-gold)]/10 border border-[var(--accent-gold)]/30">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-[13px] font-semibold text-[var(--accent-gold)]">
+                  {gameState.players[disconnectedPlayer.seatIndex]?.displayName} disconnected
+                </span>
+                {disconnectedPlayer.secondsLeft > 0 ? (
+                  <span className="text-[12px] text-[var(--text-secondary)] ml-2">
+                    Reconnecting... {disconnectedPlayer.secondsLeft}s
+                  </span>
+                ) : (
+                  <span className="text-[12px] text-[var(--text-muted)] ml-2">
+                    Timed out
+                  </span>
+                )}
+              </div>
+              {disconnectedPlayer.secondsLeft === 0 && gameId && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      socket.emit('game:replace_with_ai' as any, { gameId, seatIndex: disconnectedPlayer.seatIndex });
+                      setDisconnectedPlayer(null);
+                    }}
+                    className="px-3 py-1.5 text-[12px] font-medium bg-[var(--accent-green)] text-white rounded hover:brightness-110 transition-all"
+                  >
+                    Continue with AI
+                  </button>
+                  <button
+                    onClick={() => {
+                      socket.emit('game:end' as any, { gameId });
+                      setDisconnectedPlayer(null);
+                    }}
+                    className="px-3 py-1.5 text-[12px] border border-[var(--border-subtle)] rounded hover:bg-white/[0.04] transition-colors"
+                  >
+                    End Game
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
 

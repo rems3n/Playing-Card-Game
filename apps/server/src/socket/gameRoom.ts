@@ -36,6 +36,8 @@ interface WaitingRoom {
 }
 
 const waitingRooms = new Map<string, WaitingRoom>();
+const disconnectTimers = new Map<string, NodeJS.Timeout>(); // `gameId:seat` → timer
+const RECONNECT_TIMEOUT = 30_000; // 30 seconds
 
 export function setupGameHandlers(
   io: GameServer,
@@ -297,16 +299,89 @@ export function setupGameHandlers(
         const seat = gameService.joinGame(gameId, socket.id, displayName, userId ?? undefined);
         await socket.join(gameId);
 
+        // Cancel any pending disconnect timer for this seat
+        const timerKey = `${gameId}:${seat}`;
+        const existingTimer = disconnectTimers.get(timerKey);
+        if (existingTimer) {
+          clearTimeout(existingTimer);
+          disconnectTimers.delete(timerKey);
+          console.log(`Player reconnected to seat ${seat} in game ${gameId}`);
+        }
+
+        // Mark as connected
+        const room = gameService.getRoom(gameId);
+        if (room) {
+          room.engine.getState().players[seat].isConnected = true;
+        }
+
         const state = gameService.getVisibleState(gameId, seat);
         socket.emit('game:state', state);
 
         io.to(gameId).emit('game:player_reconnected', { seatIndex: seat });
+
+        // Broadcast updated state to all players (shows reconnected status)
+        broadcastStates(io, gameService, gameId);
       } catch (err: any) {
         socket.emit('game:error', {
           code: 'JOIN_FAILED',
           message: err.message,
         });
       }
+    });
+
+    // ── Play a card ──
+    // ── Replace disconnected player with AI ──
+    socket.on('game:replace_with_ai', async (data) => {
+      const { gameId, seatIndex } = data;
+      gameService.replaceWithAI(gameId, seatIndex);
+
+      // Cancel the timer
+      const timerKey = `${gameId}:${seatIndex}`;
+      const timer = disconnectTimers.get(timerKey);
+      if (timer) { clearTimeout(timer); disconnectTimers.delete(timerKey); }
+
+      // Broadcast updated state
+      broadcastStates(io, gameService, gameId);
+
+      // If it was the AI's turn, execute AI turns
+      const room = gameService.getRoom(gameId);
+      if (room) {
+        const state = room.engine.getState();
+        if (state.phase === GamePhase.Playing && room.aiPlayers.has(state.currentPlayerSeat)) {
+          await handleAITurns(io, gameService, gameId);
+        }
+      }
+    });
+
+    // ── End game early ──
+    socket.on('game:end', async (data) => {
+      const { gameId } = data;
+      const room = gameService.getRoom(gameId);
+      if (!room) return;
+
+      io.to(gameId).emit('game:over', {
+        finalScores: room.engine.getState().scores,
+        winnerSeat: -1, // no winner
+      });
+      gameService.removeGame(gameId);
+    });
+
+    // ── Leave a game (voluntary) ──
+    socket.on('game:leave', async (data) => {
+      const { gameId } = data;
+      const seat = gameService.handlePlayerDisconnect(gameId, socket.id);
+      if (seat === -1) return;
+
+      socket.leave(gameId);
+
+      // Notify others this player left
+      io.to(gameId).emit('game:player_disconnected', {
+        seatIndex: seat,
+        timeoutSeconds: 30,
+      });
+
+      // Start reconnect timer
+      startDisconnectTimer(io, gameService, gameId, seat);
     });
 
     // ── Play a card ──
@@ -465,13 +540,26 @@ export function setupGameHandlers(
       if (userId) {
         const disconnectedUser = await presenceService.setOffline(socket.id);
         if (disconnectedUser) {
-          // Notify friends this user went offline
           io.emit('presence:update', { userId: disconnectedUser, online: false });
         }
       }
 
       // Clean up matchmaking
       await matchmakingService.leaveAllQueues(socket.id);
+
+      // Handle mid-game disconnect — start reconnect timer
+      const gameInfo = gameService.findGameBySocket(socket.id);
+      if (gameInfo) {
+        const { gameId, seat } = gameInfo;
+        gameService.handlePlayerDisconnect(gameId, socket.id);
+
+        io.to(gameId).emit('game:player_disconnected', {
+          seatIndex: seat,
+          timeoutSeconds: 30,
+        });
+
+        startDisconnectTimer(io, gameService, gameId, seat);
+      }
 
       // Clean up waiting rooms
       for (const [roomId, room] of waitingRooms) {
@@ -507,6 +595,40 @@ function toRoomState(room: WaitingRoom): WaitingRoomState {
     maxPlayers: room.maxPlayers,
     fillWithAI: room.players.length < room.maxPlayers,
   };
+}
+
+function startDisconnectTimer(
+  io: GameServer,
+  gameService: GameService,
+  gameId: string,
+  seat: number,
+): void {
+  const timerKey = `${gameId}:${seat}`;
+
+  // Clear any existing timer for this seat
+  const existing = disconnectTimers.get(timerKey);
+  if (existing) clearTimeout(existing);
+
+  const timer = setTimeout(async () => {
+    disconnectTimers.delete(timerKey);
+
+    const room = gameService.getRoom(gameId);
+    if (!room) return;
+
+    const player = room.engine.getState().players[seat];
+    if (player.isConnected) return; // They reconnected
+
+    console.log(`Reconnect timeout for seat ${seat} in game ${gameId}`);
+
+    // Notify remaining players — they can choose to continue or quit
+    // For now, we emit a special event. The client shows a modal.
+    io.to(gameId).emit('game:player_disconnected', {
+      seatIndex: seat,
+      timeoutSeconds: 0, // 0 = timer expired
+    });
+  }, RECONNECT_TIMEOUT);
+
+  disconnectTimers.set(timerKey, timer);
 }
 
 async function handleAITurns(

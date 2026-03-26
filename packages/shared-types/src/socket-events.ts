@@ -35,6 +35,8 @@ export interface ClientToServerEvents {
   'game:pass_cards': (data: { gameId: string; cards: Card[] }) => void;
   'game:call_trump': (data: { gameId: string; suit: string | 'pass' }) => void;
   'game:go_alone': (data: { gameId: string }) => void;
+  'game:replace_with_ai': (data: { gameId: string; seatIndex: number }) => void;
+  'game:end': (data: { gameId: string }) => void;
 
   'matchmaking:join': (data: {
     gameType: GameType;

@@ -293,6 +293,62 @@ export class GameService {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  /**
+   * Mark a player as disconnected (remove socket mapping but keep seat).
+   * Returns the seat index, or -1 if not found.
+   */
+  handlePlayerDisconnect(gameId: string, socketId: string): number {
+    const room = this.games.get(gameId);
+    if (!room) return -1;
+
+    const seat = room.socketSeats.get(socketId);
+    if (seat === undefined) return -1;
+
+    room.engine.getState().players[seat].isConnected = false;
+    // Don't remove socket mapping yet — they might reconnect
+    return seat;
+  }
+
+  /**
+   * Replace a disconnected human player with an AI bot.
+   */
+  replaceWithAI(gameId: string, seatIndex: number): void {
+    const room = this.games.get(gameId);
+    if (!room) return;
+
+    const player = room.engine.getState().players[seatIndex];
+    const ai = createAIPlayer(AIDifficulty.Intermediate, player.displayName + ' (AI)');
+    room.aiPlayers.set(seatIndex, ai);
+    room.engine.setPlayer(seatIndex, null, ai.displayName, true);
+
+    // Remove old socket mapping
+    const oldSocketId = room.playerSockets.get(seatIndex);
+    if (oldSocketId) {
+      room.socketSeats.delete(oldSocketId);
+    }
+    room.playerSockets.delete(seatIndex);
+  }
+
+  /**
+   * Find which game a socket is in. Returns { gameId, seat } or null.
+   */
+  findGameBySocket(socketId: string): { gameId: string; seat: number } | null {
+    for (const [gameId, room] of this.games) {
+      const seat = room.socketSeats.get(socketId);
+      if (seat !== undefined) return { gameId, seat };
+    }
+    return null;
+  }
+
+  /**
+   * Check if there are any human players still connected in a game.
+   */
+  getConnectedHumanCount(gameId: string): number {
+    const room = this.games.get(gameId);
+    if (!room) return 0;
+    return room.playerSockets.size;
+  }
+
   removeGame(gameId: string): void {
     this.games.delete(gameId);
   }
