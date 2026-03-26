@@ -1,0 +1,343 @@
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
+import { AIDifficulty, GameType } from '@card-game/shared-types';
+import { useSocket } from '@/hooks/useSocket';
+import { useGameStore } from '@card-game/shared-store';
+import { FriendsList } from '@/components/lobby/FriendsList';
+
+const GAME_OPTIONS = [
+  {
+    type: GameType.Hearts,
+    name: 'Hearts',
+    icon: '♥',
+    color: 'text-red-500',
+    description: 'Avoid taking hearts and the queen of spades. Lowest score wins!',
+    players: '4 players',
+    available: true,
+  },
+  {
+    type: GameType.Spades,
+    name: 'Spades',
+    icon: '♠',
+    color: 'text-blue-400',
+    description: 'Bid tricks with your partner. Meet your bid to score points.',
+    players: '4 players (2v2)',
+    available: true,
+  },
+  {
+    type: GameType.Euchre,
+    name: 'Euchre',
+    icon: '🃏',
+    color: 'text-yellow-400',
+    description: 'Call trump, take tricks, and race to 10 points with your partner.',
+    players: '4 players (2v2)',
+    available: true,
+  },
+];
+
+const DIFFICULTY_OPTIONS = [
+  { value: AIDifficulty.Beginner, label: 'Beginner', emoji: '😊', desc: 'Random play' },
+  { value: AIDifficulty.Intermediate, label: 'Intermediate', emoji: '🧐', desc: 'Smart play' },
+  { value: AIDifficulty.Advanced, label: 'Advanced', emoji: '😤', desc: 'Card counting' },
+  { value: AIDifficulty.Expert, label: 'Expert', emoji: '🧠', desc: 'Monte Carlo' },
+];
+
+export default function LobbyPage() {
+  const router = useRouter();
+  const socket = useSocket();
+  const { data: session } = useSession();
+  const { setGameId } = useGameStore();
+  const [selectedGame, setSelectedGame] = useState<GameType>(GameType.Hearts);
+  const [difficulty, setDifficulty] = useState<AIDifficulty>(AIDifficulty.Beginner);
+  const [isCreating, setIsCreating] = useState(false);
+  const [matchmaking, setMatchmaking] = useState(false);
+  const [queuePosition, setQueuePosition] = useState<number | null>(null);
+  const [playMode, setPlayMode] = useState<'ai' | 'online'>('ai');
+  const [gameSearch, setGameSearch] = useState('');
+  const [gameDropdownOpen, setGameDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setGameDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  // Listen for matchmaking events
+  useEffect(() => {
+    socket.on('matchmaking:found', ({ gameId }) => {
+      setMatchmaking(false);
+      setGameId(gameId);
+      router.push(`/game/${gameId}`);
+    });
+
+    socket.on('matchmaking:waiting', ({ position }) => {
+      setQueuePosition(position);
+    });
+
+    return () => {
+      socket.off('matchmaking:found');
+      socket.off('matchmaking:waiting');
+    };
+  }, [socket, setGameId, router]);
+
+  const handlePlayAI = () => {
+    setIsCreating(true);
+
+    socket.once('lobby:game_created', ({ gameId }) => {
+      setGameId(gameId);
+      router.push(`/game/${gameId}`);
+    });
+
+    socket.once('game:error', ({ message }) => {
+      setIsCreating(false);
+      alert(`Failed to create game: ${message}`);
+    });
+
+    socket.emit('lobby:create_game', {
+      gameType: selectedGame,
+      aiDifficulty: difficulty,
+      fillWithAI: true,
+    });
+  };
+
+  const handleMatchmaking = () => {
+    setMatchmaking(true);
+    setQueuePosition(null);
+    socket.emit('matchmaking:join', { gameType: selectedGame });
+  };
+
+  const handleCancelMatchmaking = () => {
+    setMatchmaking(false);
+    setQueuePosition(null);
+    socket.emit('matchmaking:cancel');
+  };
+
+  return (
+    <div className="max-w-6xl mx-auto p-6">
+      {/* Hero */}
+      <div className="text-center mb-8">
+        <h1 className="text-4xl font-bold mb-2">
+          <span className="text-[var(--accent-gold)]">Card</span>Arena
+        </h1>
+        <p className="text-[var(--text-secondary)]">
+          Play classic card games against AI opponents or friends
+        </p>
+      </div>
+
+      <div className="flex gap-6">
+        {/* Main content */}
+        <div className="flex-1 min-w-0">
+          {/* Game selection */}
+          <div className="mb-6">
+            <h2 className="text-lg font-semibold mb-3">Choose a Game</h2>
+
+            {/* Search bar + dropdown toggle */}
+            <div className="relative mb-2" ref={dropdownRef}>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  <input
+                    type="text"
+                    value={gameSearch}
+                    onChange={(e) => { setGameSearch(e.target.value); setGameDropdownOpen(true); }}
+                    onFocus={() => setGameDropdownOpen(true)}
+                    placeholder="Search games..."
+                    className="w-full bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-lg pl-9 pr-3 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-blue)]/50"
+                  />
+                </div>
+                <button
+                  onClick={() => setGameDropdownOpen(!gameDropdownOpen)}
+                  className="px-3 py-2.5 bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-lg hover:border-white/20 transition-colors"
+                >
+                  <svg className={`w-4 h-4 text-[var(--text-secondary)] transition-transform ${gameDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Dropdown list */}
+              {gameDropdownOpen && (
+                <div className="absolute z-20 left-0 right-0 mt-1 bg-[var(--bg-tertiary)] border border-[var(--border-medium)] rounded-lg shadow-xl overflow-hidden">
+                  {GAME_OPTIONS
+                    .filter((g) =>
+                      g.name.toLowerCase().includes(gameSearch.toLowerCase()) ||
+                      g.description.toLowerCase().includes(gameSearch.toLowerCase())
+                    )
+                    .map((game) => (
+                      <button
+                        key={game.type}
+                        onClick={() => {
+                          if (game.available) {
+                            setSelectedGame(game.type);
+                            setGameDropdownOpen(false);
+                            setGameSearch('');
+                          }
+                        }}
+                        disabled={!game.available}
+                        className={`
+                          flex items-center gap-3 w-full text-left px-4 py-3 transition-colors
+                          ${selectedGame === game.type ? 'bg-[var(--accent-gold)]/10' : 'hover:bg-white/[0.04]'}
+                          ${!game.available ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+                        `}
+                      >
+                        <span className={`text-xl shrink-0 ${game.color}`}>{game.icon}</span>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold">{game.name}</span>
+                            <span className="text-[10px] text-[var(--text-muted)]">{game.players}</span>
+                            {selectedGame === game.type && (
+                              <svg className="w-4 h-4 text-[var(--accent-gold)] shrink-0 ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                            {!game.available && (
+                              <span className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded-full">Soon</span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-[var(--text-secondary)] mt-0.5">{game.description}</p>
+                        </div>
+                      </button>
+                    ))}
+                  {GAME_OPTIONS.filter((g) =>
+                    g.name.toLowerCase().includes(gameSearch.toLowerCase()) ||
+                    g.description.toLowerCase().includes(gameSearch.toLowerCase())
+                  ).length === 0 && (
+                    <div className="px-4 py-3 text-sm text-[var(--text-muted)] text-center">
+                      No games found
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Selected game display */}
+            {(() => {
+              const selected = GAME_OPTIONS.find((g) => g.type === selectedGame);
+              if (!selected) return null;
+              return (
+                <div className="flex items-center gap-3 px-4 py-3 rounded-lg border-2 border-[var(--accent-gold)] bg-[var(--accent-gold)]/10">
+                  <span className={`text-2xl shrink-0 ${selected.color}`}>{selected.icon}</span>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold">{selected.name}</span>
+                      <span className="text-[10px] text-[var(--text-muted)]">{selected.players}</span>
+                    </div>
+                    <p className="text-xs text-[var(--text-secondary)] mt-0.5">{selected.description}</p>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* Play mode tabs */}
+          <div className="mb-4">
+            <div className="flex gap-1 p-1 bg-[var(--bg-secondary)] rounded-lg w-fit">
+              <button
+                onClick={() => setPlayMode('ai')}
+                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                  playMode === 'ai'
+                    ? 'bg-[var(--accent-green)] text-white'
+                    : 'text-[var(--text-secondary)] hover:text-white'
+                }`}
+              >
+                vs AI
+              </button>
+              <button
+                onClick={() => setPlayMode('online')}
+                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                  playMode === 'online'
+                    ? 'bg-[var(--accent-blue)] text-white'
+                    : 'text-[var(--text-secondary)] hover:text-white'
+                }`}
+              >
+                Online
+              </button>
+            </div>
+          </div>
+
+          {/* AI Difficulty (only shown for AI mode) */}
+          {playMode === 'ai' && (
+            <div className="mb-6">
+              <h2 className="text-sm font-semibold mb-3 text-[var(--text-secondary)]">AI Difficulty</h2>
+              <div className="flex flex-col gap-2">
+                {DIFFICULTY_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setDifficulty(opt.value)}
+                    className={`
+                      flex items-center gap-3 px-4 py-2.5 rounded-lg border-2 text-left transition-all
+                      ${difficulty === opt.value
+                        ? 'border-[var(--accent-green)] bg-[var(--accent-green)]/10'
+                        : 'border-[var(--border-subtle)] bg-[var(--bg-secondary)] hover:border-white/20'
+                      }
+                    `}
+                  >
+                    <span className="text-xl shrink-0">{opt.emoji}</span>
+                    <div>
+                      <div className="text-sm font-medium">{opt.label}</div>
+                      <div className="text-[11px] text-[var(--text-secondary)]">{opt.desc}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Play button */}
+          <div className="flex justify-center">
+            {playMode === 'ai' ? (
+              <button
+                onClick={handlePlayAI}
+                disabled={isCreating}
+                className="px-12 py-4 rounded-xl text-lg font-bold bg-[var(--accent-green)] text-white hover:brightness-110 disabled:opacity-50 transition-all shadow-lg shadow-green-500/20"
+              >
+                {isCreating ? 'Creating Game...' : 'Play vs AI'}
+              </button>
+            ) : matchmaking ? (
+              <div className="text-center">
+                <div className="mb-3 flex items-center justify-center gap-3">
+                  <div className="w-5 h-5 border-2 border-[var(--accent-blue)] border-t-transparent rounded-full animate-spin" />
+                  <span className="text-[var(--accent-blue)] font-medium">
+                    Searching for opponents...
+                    {queuePosition !== null && ` (Position: ${queuePosition})`}
+                  </span>
+                </div>
+                <button
+                  onClick={handleCancelMatchmaking}
+                  className="px-6 py-2 text-sm text-[var(--text-secondary)] hover:text-white border border-[var(--border-subtle)] rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={handleMatchmaking}
+                className="px-12 py-4 rounded-xl text-lg font-bold bg-[var(--accent-blue)] text-white hover:brightness-110 transition-all shadow-lg shadow-blue-500/20"
+              >
+                Find Match
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Right sidebar — Friends */}
+        {session && (
+          <div className="w-72 shrink-0">
+            <FriendsList />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "CardArena",
+    "slug": "cardarena",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "cardarena",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#262421"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.cardarena.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#262421"
+      },
+      "package": "com.cardarena.app"
+    },
+    "plugins": ["expo-router", "expo-secure-store"]
+  }
+}

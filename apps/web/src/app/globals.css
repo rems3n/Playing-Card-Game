@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+:root {
+  /* Chess.com inspired palette */
+  --bg-primary: #262421;
+  --bg-secondary: #302e2b;
+  --bg-tertiary: #3c3a36;
+  --bg-table: #1e3a5f;
+  --bg-table-dark: #162d4a;
+  --bg-chat: #f0ede8;
+  --text-primary: #ffffff;
+  --text-secondary: #c4c0bc;
+  --text-muted: #8a8682;
+  --accent-green: #81b64c;
+  --accent-gold: #e8a63a;
+  --accent-red: #e04040;
+  --accent-blue: #5b9bd5;
+  --border-subtle: rgba(255, 255, 255, 0.10);
+  --border-medium: rgba(255, 255, 255, 0.16);
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.4);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.5;
+}
+
+/* Animations */
+@keyframes card-deal {
+  from { opacity: 0; transform: translateY(-20px) scale(0.8); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes card-play {
+  0% { opacity: 0; transform: translateY(10px) scale(0.7); }
+  60% { opacity: 1; transform: translateY(-2px) scale(1.02); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes score-pop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.3); color: var(--accent-gold); }
+  100% { transform: scale(1); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-card-deal { animation: card-deal 0.5s cubic-bezier(0.22, 0.61, 0.36, 1); }
+.animate-card-play { animation: card-play 0.5s cubic-bezier(0.22, 0.61, 0.36, 1); }
+.animate-score-pop { animation: score-pop 0.4s ease-out; }
+.animate-fade-in { animation: fade-in 0.2s ease-out; }
+.animate-slide-up { animation: slide-up 0.25s ease-out; }
+
+/* Scrollbar styling */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-medium); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }

@@ -1,0 +1,25 @@
+{
+  "name": "@card-game/shared-socket",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@card-game/shared-types": "*",
+    "socket.io-client": "^4.8.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}
