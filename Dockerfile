@@ -60,3 +60,4 @@ RUN npm install --omit=dev --ignore-scripts
 WORKDIR /app/apps/server
 
 CMD ["node", "dist/index.js"]
+# CardArena
