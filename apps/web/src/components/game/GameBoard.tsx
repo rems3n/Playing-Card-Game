@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { GamePhase, GameType, type Card } from '@card-game/shared-types';
 import { useSocket } from '@/hooks/useSocket';
 import { useGameStore, useSettingsStore } from '@card-game/shared-store';
@@ -10,6 +10,7 @@ import { TrickArea } from './TrickArea';
 import { ScoreBoard } from './ScoreBoard';
 import { ChatPanel } from './ChatPanel';
 import { BiddingPanel } from './BiddingPanel';
+import { RulesModal } from '../RulesModal';
 
 export function GameBoard() {
   const socket = useSocket();
@@ -55,6 +56,8 @@ export function GameBoard() {
       </div>
     );
   }
+
+  const [rulesOpen, setRulesOpen] = useState(false);
 
   const isMyTurn = gameState.phase === GamePhase.Playing && gameState.currentPlayerSeat === gameState.mySeat;
   const isPassing = gameState.phase === GamePhase.Passing;
@@ -118,6 +121,17 @@ export function GameBoard() {
             )}
           </div>
           <div className="flex items-center gap-2.5 text-[11px] text-[var(--text-muted)] shrink-0 ml-3">
+            <button
+              onClick={() => setRulesOpen(true)}
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-white/[0.08] text-[var(--text-muted)] hover:text-[var(--accent-gold)] transition-colors"
+              title="How to play"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>Rules</span>
+            </button>
+            <span className="w-px h-3 bg-[var(--border-subtle)]" />
             <span className="capitalize">{gameState.gameType}</span>
             <span className="w-px h-3 bg-[var(--border-subtle)]" />
             <span>R{gameState.roundNumber + 1}</span>
@@ -239,6 +253,12 @@ export function GameBoard() {
 
         <ChatPanel />
       </div>
+
+      <RulesModal
+        gameType={gameState.gameType as 'hearts' | 'spades' | 'euchre'}
+        open={rulesOpen}
+        onClose={() => setRulesOpen(false)}
+      />
     </div>
   );
 }
