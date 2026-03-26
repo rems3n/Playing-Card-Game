@@ -87,48 +87,62 @@ export function setupGameHandlers(
         const position = await matchmakingService.getPosition(gameType, socket.id);
         socket.emit('matchmaking:waiting', { position: position ?? 1 });
 
-        // Try to find a match
-        const requiredPlayers = PLAYERS_PER_GAME[gameType] ?? 4;
-        const matched = await matchmakingService.tryMatch(gameType, requiredPlayers);
+        // Try to find a match — need at least 2 human players, fill rest with AI
+        const MIN_HUMANS = 2;
+        const totalPlayers = PLAYERS_PER_GAME[gameType] ?? 4;
+        const queueSize = await matchmakingService.getQueueSize(gameType);
 
-        if (matched) {
-          // Create a game for matched players
-          const gameId = gameService.createGame(gameType as GameType);
+        if (queueSize >= MIN_HUMANS) {
+          // Pull up to totalPlayers humans from queue, or as many as available
+          const humanCount = Math.min(queueSize, totalPlayers);
+          const matched = await matchmakingService.tryMatch(gameType, humanCount);
 
-          for (const entry of matched) {
-            const seat = gameService.joinGame(
-              gameId,
-              entry.socketId,
-              entry.displayName,
-              entry.userId ?? undefined,
-            );
+          if (matched) {
+            const gameId = gameService.createGame(gameType as GameType);
 
-            const entrySocket = io.sockets.sockets.get(entry.socketId);
-            if (entrySocket) {
-              await entrySocket.join(gameId);
-            }
-          }
+            for (const entry of matched) {
+              gameService.joinGame(
+                gameId,
+                entry.socketId,
+                entry.displayName,
+                entry.userId ?? undefined,
+              );
 
-          gameService.startGame(gameId);
-
-          // Notify all matched players
-          for (const entry of matched) {
-            const entrySocket = io.sockets.sockets.get(entry.socketId);
-            if (entrySocket) {
-              const seat = gameService.getSeatForSocket(gameId, entry.socketId);
-              if (seat !== undefined) {
-                entrySocket.emit('matchmaking:found', {
-                  gameId,
-                  opponents: matched
-                    .filter((m) => m.socketId !== entry.socketId)
-                    .map((m) => ({
-                      displayName: m.displayName,
-                      seatIndex: gameService.getSeatForSocket(gameId, m.socketId) ?? 0,
-                    })),
-                });
-                entrySocket.emit('game:state', gameService.getVisibleState(gameId, seat));
+              const entrySocket = io.sockets.sockets.get(entry.socketId);
+              if (entrySocket) {
+                await entrySocket.join(gameId);
               }
             }
+
+            // Fill remaining seats with AI
+            if (matched.length < totalPlayers) {
+              gameService.fillWithAI(gameId, AIDifficulty.Intermediate);
+            }
+
+            gameService.startGame(gameId);
+
+            // Notify all matched players
+            for (const entry of matched) {
+              const entrySocket = io.sockets.sockets.get(entry.socketId);
+              if (entrySocket) {
+                const seat = gameService.getSeatForSocket(gameId, entry.socketId);
+                if (seat !== undefined) {
+                  entrySocket.emit('matchmaking:found', {
+                    gameId,
+                    opponents: matched
+                      .filter((m) => m.socketId !== entry.socketId)
+                      .map((m) => ({
+                        displayName: m.displayName,
+                        seatIndex: gameService.getSeatForSocket(gameId, m.socketId) ?? 0,
+                      })),
+                  });
+                  entrySocket.emit('game:state', gameService.getVisibleState(gameId, seat));
+                }
+              }
+            }
+
+            // Execute AI turns if needed (passing/bidding phase)
+            await handleAITurns(io, gameService, gameId);
           }
         }
       } catch (err: any) {
