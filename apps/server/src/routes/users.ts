@@ -20,22 +20,41 @@ export async function userRoutes(fastify: FastifyInstance): Promise<void> {
       providerId: string;
     };
 
-    const result = await db
-      .insert(users)
-      .values({
-        email: body.email,
-        displayName: body.displayName,
-        avatarUrl: body.avatarUrl ?? null,
-        authProvider: body.provider,
-        authProviderId: body.providerId,
-      })
-      .onConflictDoUpdate({
-        target: [users.authProvider, users.authProviderId],
-        set: {
+    let result;
+    try {
+      result = await db
+        .insert(users)
+        .values({
+          email: body.email,
+          displayName: body.displayName,
+          avatarUrl: body.avatarUrl ?? null,
+          authProvider: body.provider,
+          authProviderId: body.providerId,
+        })
+        .onConflictDoUpdate({
+          target: [users.authProvider, users.authProviderId],
+          set: {
+            displayName: body.displayName,
+            avatarUrl: body.avatarUrl ?? null,
+            lastSeenAt: new Date(),
+          },
+        })
+        .returning();
+    } catch {
+      // If insert fails (e.g. email unique constraint because the authProviderId
+      // was previously stored as the email), fix the existing row's providerId.
+      result = await db
+        .update(users)
+        .set({
+          authProvider: body.provider,
+          authProviderId: body.providerId,
+          displayName: body.displayName,
+          avatarUrl: body.avatarUrl ?? null,
           lastSeenAt: new Date(),
-        },
-      })
-      .returning();
+        })
+        .where(eq(users.email, body.email))
+        .returning();
+    }
 
     const user = result[0];
 

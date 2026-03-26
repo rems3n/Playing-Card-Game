@@ -66,8 +66,8 @@ export default function ProfilePage() {
             email,
             displayName: session!.user!.name ?? 'Player',
             avatarUrl: session!.user!.image ?? null,
-            provider: 'google',
-            providerId: email, // fallback; real providerId comes from auth callback
+            provider: (session!.user as any).provider ?? 'google',
+            providerId: (session!.user as any).providerId ?? email,
           }),
         });
 
