@@ -23,8 +23,9 @@ import { ratingHistoryRoutes } from './routes/ratingHistory.js';
 async function main() {
   const fastify = Fastify({ logger: true });
 
+  const allowedOrigins = [env.WEB_URL, 'http://localhost:3000'].filter(Boolean);
   await fastify.register(cors, {
-    origin: env.WEB_URL,
+    origin: allowedOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
   });
@@ -62,7 +63,7 @@ async function main() {
     fastify.server,
     {
       cors: {
-        origin: env.WEB_URL,
+        origin: allowedOrigins,
         credentials: true,
       },
     },
