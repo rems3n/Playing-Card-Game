@@ -2,6 +2,7 @@
 
 import type { Card } from '@card-game/shared-types';
 import { Suit, Rank } from '@card-game/shared-types';
+import type { CardBackDesign } from '@card-game/shared-store';
 
 const RANK_DISPLAY: Record<number, string> = {
   [Rank.Two]: '2', [Rank.Three]: '3', [Rank.Four]: '4', [Rank.Five]: '5',
@@ -68,17 +69,80 @@ export function PlayingCard({ card, onClick, selected, disabled, small, scale = 
   );
 }
 
-export function CardBack({ small, scale = 1 }: { small?: boolean; scale?: number }) {
+interface CardBackProps {
+  small?: boolean;
+  scale?: number;
+  design?: CardBackDesign;
+  rotation?: number;
+}
+
+function BackPattern({ pattern, accent, h }: { pattern: string; accent: string; h: number }) {
+  switch (pattern) {
+    case 'diamond':
+      return (
+        <svg width={h * 0.5} height={h * 0.5} viewBox="0 0 40 40" className="opacity-60">
+          <rect x="12" y="2" width="16" height="16" rx="2" transform="rotate(45 20 10)" fill="none" stroke={accent} strokeWidth="1.5" />
+          <rect x="12" y="18" width="16" height="16" rx="2" transform="rotate(45 20 26)" fill="none" stroke={accent} strokeWidth="1.5" />
+        </svg>
+      );
+    case 'stripe':
+      return (
+        <svg width={h * 0.55} height={h * 0.65} viewBox="0 0 30 50" className="opacity-50">
+          {[0, 8, 16, 24, 32, 40].map((y) => (
+            <line key={y} x1="0" y1={y} x2="30" y2={y} stroke={accent} strokeWidth="1" />
+          ))}
+        </svg>
+      );
+    case 'ornate':
+      return (
+        <svg width={h * 0.5} height={h * 0.6} viewBox="0 0 40 50" className="opacity-50">
+          <ellipse cx="20" cy="25" rx="14" ry="18" fill="none" stroke={accent} strokeWidth="1.5" />
+          <ellipse cx="20" cy="25" rx="8" ry="11" fill="none" stroke={accent} strokeWidth="1" />
+          <circle cx="20" cy="25" r="3" fill={accent} opacity="0.4" />
+        </svg>
+      );
+    case 'royal':
+      return (
+        <svg width={h * 0.45} height={h * 0.55} viewBox="0 0 36 44" className="opacity-60">
+          <path d="M18 6L26 16H22L28 26H22L26 36H10L14 26H8L14 16H10Z" fill="none" stroke={accent} strokeWidth="1.5" />
+          <circle cx="18" cy="22" r="3.5" fill={accent} opacity="0.3" />
+        </svg>
+      );
+    case 'minimal':
+      return (
+        <svg width={h * 0.35} height={h * 0.35} viewBox="0 0 24 24" className="opacity-40">
+          <rect x="4" y="4" width="16" height="16" rx="3" fill="none" stroke={accent} strokeWidth="1.5" />
+        </svg>
+      );
+    default:
+      return (
+        <div className="rounded-sm border opacity-40" style={{ width: '55%', height: '55%', borderColor: accent, backgroundColor: `${accent}20` }} />
+      );
+  }
+}
+
+export function CardBack({ small, scale = 1, design, rotation = 0 }: CardBackProps) {
+  const bg = design?.bg ?? 'linear-gradient(135deg, #2d5fa1, #1e3f6f)';
+  const border = design?.border ?? '#2a4a7f';
+  const pattern = design?.pattern ?? 'classic';
+  const accent = design?.accent ?? '#4a7abf';
+  const w = small ? 42 * scale : 56 * scale;
+  const h = small ? 58 * scale : 80 * scale;
+
   return (
     <div
       style={{
-        width: small ? 42 * scale : 56 * scale,
-        height: small ? 58 * scale : 80 * scale,
+        width: w,
+        height: h,
         borderRadius: 6 * scale,
+        background: bg,
+        borderColor: border,
+        transform: rotation ? `rotate(${rotation}deg)` : undefined,
+        transformOrigin: 'bottom center',
       }}
-      className="flex items-center justify-center border border-[#2a4a7f] bg-gradient-to-br from-[#2d5fa1] to-[#1e3f6f] shadow-[var(--shadow-card)]"
+      className="flex items-center justify-center border shadow-[var(--shadow-card)] shrink-0"
     >
-      <div className="w-[60%] h-[60%] rounded-sm border border-[#4a7abf]/40 bg-[#3a6aaf]/20" />
+      <BackPattern pattern={pattern} accent={accent} h={h} />
     </div>
   );
 }
