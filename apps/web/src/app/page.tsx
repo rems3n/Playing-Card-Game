@@ -339,19 +339,10 @@ export default function LobbyPage() {
             })()}
           </div>
 
-          {/* Play mode tabs */}
+          {/* Play mode */}
           <div className="mb-4">
+            <h2 className="text-lg font-semibold mb-3">Play</h2>
             <div className="flex gap-1 p-1 bg-[var(--bg-secondary)] rounded-lg w-fit">
-              <button
-                onClick={() => setPlayMode('ai')}
-                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                  playMode === 'ai'
-                    ? 'bg-[var(--accent-green)] text-white'
-                    : 'text-[var(--text-secondary)] hover:text-white'
-                }`}
-              >
-                vs AI
-              </button>
               <button
                 onClick={() => setPlayMode('online')}
                 className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
@@ -361,6 +352,16 @@ export default function LobbyPage() {
                 }`}
               >
                 With Friends
+              </button>
+              <button
+                onClick={() => setPlayMode('ai')}
+                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                  playMode === 'ai'
+                    ? 'bg-[var(--accent-green)] text-white'
+                    : 'text-[var(--text-secondary)] hover:text-white'
+                }`}
+              >
+                vs AI
               </button>
             </div>
           </div>
