@@ -355,4 +355,17 @@ export class HeartsEngine extends GameEngine {
   playCard(seatIndex: number, card: Card): void {
     super.playCard(seatIndex, card);
   }
+
+  override serialize(): Record<string, unknown> {
+    return {
+      ...super.serialize(),
+      pendingPasses: Array.from(this.pendingPasses.entries()),
+    };
+  }
+
+  override restore(data: Record<string, unknown>): void {
+    super.restore(data);
+    const passes = data.pendingPasses as Array<[number, Card[]]> | undefined;
+    this.pendingPasses = new Map(passes ?? []);
+  }
 }

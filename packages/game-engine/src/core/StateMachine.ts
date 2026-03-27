@@ -40,4 +40,9 @@ export class StateMachine {
     }
     this.currentPhase = phase;
   }
+
+  /** Force phase without validation (for restoring from storage). */
+  forcePhase(phase: GamePhase): void {
+    this.currentPhase = phase;
+  }
 }

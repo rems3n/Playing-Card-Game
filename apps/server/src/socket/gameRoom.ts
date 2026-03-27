@@ -73,11 +73,11 @@ export function setupGameHandlers(
           data.aiDifficulty,
         );
 
-        const seat = gameService.joinGame(gameId, socket.id, displayName, userId ?? undefined);
+        const seat = await gameService.joinGame(gameId, socket.id, displayName, userId ?? undefined);
         await socket.join(gameId);
 
         if (data.fillWithAI !== false) {
-          gameService.fillWithAI(
+          await gameService.fillWithAI(
             gameId,
             data.aiDifficulty ?? AIDifficulty.Beginner,
           );
@@ -85,17 +85,17 @@ export function setupGameHandlers(
 
         socket.emit('lobby:game_created', { gameId });
 
-        gameService.startGame(gameId);
+        await gameService.startGame(gameId);
 
-        const state = gameService.getVisibleState(gameId, seat);
+        const state = await gameService.getVisibleState(gameId, seat);
         socket.emit('game:state', state);
 
         // Handle AI turns (passing in Hearts, bidding in Spades/Euchre)
         await handleAITurns(io, gameService, gameId);
-        broadcastStates(io, gameService, gameId);
+        await broadcastStates(io, gameService, gameId);
 
         // If AI bidding finished and transitioned to playing, handle AI card plays
-        const phase = gameService.getPhase(gameId);
+        const phase = await gameService.getPhase(gameId);
         if (phase === GamePhase.Playing) {
           await handleAITurns(io, gameService, gameId);
         }
@@ -219,30 +219,30 @@ export function setupGameHandlers(
         const gameId = gameService.createGame(pending.gameType);
 
         for (const player of pending.players) {
-          gameService.joinGame(gameId, player.socketId, player.displayName, player.userId ?? undefined);
+          await gameService.joinGame(gameId, player.socketId, player.displayName, player.userId ?? undefined);
           const s = io.sockets.sockets.get(player.socketId);
           if (s) await s.join(gameId);
         }
 
         if (pending.players.length < totalPlayers) {
-          gameService.fillWithAI(gameId, AIDifficulty.Intermediate);
+          await gameService.fillWithAI(gameId, AIDifficulty.Intermediate);
         }
 
-        gameService.startGame(gameId);
+        await gameService.startGame(gameId);
 
         // Notify all players
         for (const player of pending.players) {
           const s = io.sockets.sockets.get(player.socketId);
           if (s) {
-            const seat = gameService.getSeatForSocket(gameId, player.socketId);
+            const seat = await gameService.getSeatForSocket(gameId, player.socketId);
             if (seat !== undefined) {
-              s.emit('matchmaking:found', {
-                gameId,
-                opponents: pending.players
-                  .filter((p) => p.socketId !== player.socketId)
-                  .map((p) => ({ displayName: p.displayName, seatIndex: gameService.getSeatForSocket(gameId, p.socketId) ?? 0 })),
-              });
-              s.emit('game:state', gameService.getVisibleState(gameId, seat));
+              const opponents = [];
+              for (const p of pending.players.filter((p) => p.socketId !== player.socketId)) {
+                const pSeat = await gameService.getSeatForSocket(gameId, p.socketId);
+                opponents.push({ displayName: p.displayName, seatIndex: pSeat ?? 0 });
+              }
+              s.emit('matchmaking:found', { gameId, opponents });
+              s.emit('game:state', await gameService.getVisibleState(gameId, seat));
             }
           }
         }
@@ -374,7 +374,7 @@ export function setupGameHandlers(
       const gameId = gameService.createGame(room.gameType);
 
       for (const player of room.players) {
-        gameService.joinGame(gameId, player.socketId, player.displayName, player.userId ?? undefined);
+        await gameService.joinGame(gameId, player.socketId, player.displayName, player.userId ?? undefined);
         const playerSocket = io.sockets.sockets.get(player.socketId);
         if (playerSocket) {
           await playerSocket.join(gameId);
@@ -383,21 +383,21 @@ export function setupGameHandlers(
 
       // Fill remaining seats with AI
       if (room.players.length < room.maxPlayers) {
-        gameService.fillWithAI(gameId, AIDifficulty.Intermediate);
+        await gameService.fillWithAI(gameId, AIDifficulty.Intermediate);
       }
 
-      gameService.startGame(gameId);
+      await gameService.startGame(gameId);
 
       // Notify all players
       io.to(`room:${room.id}`).emit('room:started', { gameId });
 
       // Send game state to each player
       for (const player of room.players) {
-        const seat = gameService.getSeatForSocket(gameId, player.socketId);
+        const seat = await gameService.getSeatForSocket(gameId, player.socketId);
         if (seat !== undefined) {
           const playerSocket = io.sockets.sockets.get(player.socketId);
           if (playerSocket) {
-            playerSocket.emit('game:state', gameService.getVisibleState(gameId, seat));
+            playerSocket.emit('game:state', await gameService.getVisibleState(gameId, seat));
           }
         }
       }
@@ -413,7 +413,7 @@ export function setupGameHandlers(
     socket.on('game:join', async (data) => {
       try {
         const { gameId } = data;
-        const seat = gameService.joinGame(gameId, socket.id, displayName, userId ?? undefined);
+        const seat = await gameService.joinGame(gameId, socket.id, displayName, userId ?? undefined);
         await socket.join(gameId);
 
         // Cancel any pending disconnect timer for this seat
@@ -426,18 +426,18 @@ export function setupGameHandlers(
         }
 
         // Mark as connected
-        const room = gameService.getRoom(gameId);
+        const room = await gameService.getRoom(gameId);
         if (room) {
           room.engine.getState().players[seat].isConnected = true;
         }
 
-        const state = gameService.getVisibleState(gameId, seat);
+        const state = await gameService.getVisibleState(gameId, seat);
         socket.emit('game:state', state);
 
         io.to(gameId).emit('game:player_reconnected', { seatIndex: seat });
 
         // Broadcast updated state to all players (shows reconnected status)
-        broadcastStates(io, gameService, gameId);
+        await broadcastStates(io, gameService, gameId);
       } catch (err: any) {
         socket.emit('game:error', {
           code: 'JOIN_FAILED',
@@ -450,7 +450,7 @@ export function setupGameHandlers(
     // ── Replace disconnected player with AI ──
     socket.on('game:replace_with_ai', async (data) => {
       const { gameId, seatIndex } = data;
-      gameService.replaceWithAI(gameId, seatIndex);
+      await gameService.replaceWithAI(gameId, seatIndex);
 
       // Cancel the timer
       const timerKey = `${gameId}:${seatIndex}`;
@@ -461,7 +461,7 @@ export function setupGameHandlers(
       broadcastStates(io, gameService, gameId);
 
       // If it was the AI's turn, execute AI turns
-      const room = gameService.getRoom(gameId);
+      const room = await gameService.getRoom(gameId);
       if (room) {
         const state = room.engine.getState();
         if (state.phase === GamePhase.Playing && room.aiPlayers.has(state.currentPlayerSeat)) {
@@ -473,14 +473,14 @@ export function setupGameHandlers(
     // ── End game early ──
     socket.on('game:end', async (data) => {
       const { gameId } = data;
-      const room = gameService.getRoom(gameId);
+      const room = await gameService.getRoom(gameId);
       if (!room) return;
 
       io.to(gameId).emit('game:over', {
         finalScores: room.engine.getState().scores,
         winnerSeat: -1, // no winner
       });
-      gameService.removeGame(gameId);
+      await gameService.removeGame(gameId);
     });
 
     // ── Leave a game (voluntary) ──
@@ -505,15 +505,16 @@ export function setupGameHandlers(
     socket.on('game:play_card', async (data) => {
       try {
         const { gameId, card } = data;
-        const seat = gameService.getSeatForSocket(gameId, socket.id);
+        const seat = await gameService.getSeatForSocket(gameId, socket.id);
         if (seat === undefined) {
           socket.emit('game:error', { code: 'NOT_IN_GAME', message: 'You are not in this game' });
           return;
         }
 
-        gameService.playCard(gameId, seat, card);
+        await gameService.playCard(gameId, seat, card);
 
-        const room = gameService.getRoom(gameId)!;
+        const room = await gameService.getRoom(gameId);
+        if (!room) return;
         const state = room.engine.getState();
 
         io.to(gameId).emit('game:card_played', {
@@ -560,7 +561,7 @@ export function setupGameHandlers(
           return;
         }
 
-        broadcastStates(io, gameService, gameId);
+        await broadcastStates(io, gameService, gameId);
         await handleAITurns(io, gameService, gameId);
       } catch (err: any) {
         socket.emit('game:error', { code: 'PLAY_FAILED', message: err.message });
@@ -571,15 +572,15 @@ export function setupGameHandlers(
     socket.on('game:pass_cards', async (data) => {
       try {
         const { gameId, cards } = data;
-        const seat = gameService.getSeatForSocket(gameId, socket.id);
+        const seat = await gameService.getSeatForSocket(gameId, socket.id);
         if (seat === undefined) {
           socket.emit('game:error', { code: 'NOT_IN_GAME', message: 'You are not in this game' });
           return;
         }
 
-        gameService.passCards(gameId, seat, cards);
+        await gameService.passCards(gameId, seat, cards);
 
-        const phase = gameService.getPhase(gameId);
+        const phase = await gameService.getPhase(gameId);
         if (phase === GamePhase.Playing) {
           broadcastStates(io, gameService, gameId);
           await handleAITurns(io, gameService, gameId);
@@ -593,21 +594,21 @@ export function setupGameHandlers(
     socket.on('game:bid', async (data) => {
       try {
         const { gameId, bid } = data;
-        const seat = gameService.getSeatForSocket(gameId, socket.id);
+        const seat = await gameService.getSeatForSocket(gameId, socket.id);
         if (seat === undefined) {
           socket.emit('game:error', { code: 'NOT_IN_GAME', message: 'You are not in this game' });
           return;
         }
 
-        gameService.placeBid(gameId, seat, typeof bid === 'number' ? bid : 0);
-        broadcastStates(io, gameService, gameId);
+        await gameService.placeBid(gameId, seat, typeof bid === 'number' ? bid : 0);
+        await broadcastStates(io, gameService, gameId);
 
         // Handle AI bidding (if more AI need to bid after the human)
         await handleAITurns(io, gameService, gameId);
-        broadcastStates(io, gameService, gameId);
+        await broadcastStates(io, gameService, gameId);
 
         // If bidding finished and transitioned to playing, handle AI plays
-        const phase = gameService.getPhase(gameId);
+        const phase = await gameService.getPhase(gameId);
         if (phase === GamePhase.Playing) {
           await handleAITurns(io, gameService, gameId);
         }
@@ -620,21 +621,21 @@ export function setupGameHandlers(
     socket.on('game:call_trump', async (data) => {
       try {
         const { gameId, suit } = data;
-        const seat = gameService.getSeatForSocket(gameId, socket.id);
+        const seat = await gameService.getSeatForSocket(gameId, socket.id);
         if (seat === undefined) {
           socket.emit('game:error', { code: 'NOT_IN_GAME', message: 'You are not in this game' });
           return;
         }
 
-        gameService.callTrump(gameId, seat, suit as any);
-        broadcastStates(io, gameService, gameId);
+        await gameService.callTrump(gameId, seat, suit as any);
+        await broadcastStates(io, gameService, gameId);
 
         // Handle remaining AI trump calls
         await handleAITurns(io, gameService, gameId);
-        broadcastStates(io, gameService, gameId);
+        await broadcastStates(io, gameService, gameId);
 
         // If trump calling finished and transitioned to playing, handle AI plays
-        const phase = gameService.getPhase(gameId);
+        const phase = await gameService.getPhase(gameId);
         if (phase === GamePhase.Playing) {
           await handleAITurns(io, gameService, gameId);
         }
@@ -644,9 +645,9 @@ export function setupGameHandlers(
     });
 
     // ── In-game chat ──
-    socket.on('chat:message', (data) => {
+    socket.on('chat:message', async (data) => {
       const { gameId, text } = data;
-      const seat = gameService.getSeatForSocket(gameId, socket.id);
+      const seat = await gameService.getSeatForSocket(gameId, socket.id);
       if (seat === undefined) return;
 
       io.to(gameId).emit('chat:message', {
@@ -737,7 +738,7 @@ function startDisconnectTimer(
   const timer = setTimeout(async () => {
     disconnectTimers.delete(timerKey);
 
-    const room = gameService.getRoom(gameId);
+    const room = await gameService.getRoom(gameId);
     if (!room) return;
 
     const player = room.engine.getState().players[seat];
@@ -762,8 +763,8 @@ async function handleAITurns(
   gameId: string,
 ): Promise<void> {
   await gameService.executeAITurns(gameId, (seatIndex, card) => {
-    // Broadcast each AI card play individually so clients see them appear
-    const room = gameService.getRoom(gameId);
+    // Broadcast each AI card play — use sync room access since we're in-callback
+    const room = gameService.getRoomSync(gameId);
     if (!room) return;
     const state = room.engine.getState();
 
@@ -775,11 +776,12 @@ async function handleAITurns(
 
     // Send updated visible state to each human player
     for (const [seat, socketId] of room.playerSockets) {
-      io.to(socketId).emit('game:state', gameService.getVisibleState(gameId, seat));
+      const visibleState = room.engine.getVisibleState(seat);
+      io.to(socketId).emit('game:state', visibleState);
     }
   });
 
-  const room = gameService.getRoom(gameId);
+  const room = await gameService.getRoom(gameId);
   if (!room) return;
 
   const state = room.engine.getState();
@@ -801,19 +803,19 @@ async function handleAITurns(
     return;
   }
 
-  broadcastStates(io, gameService, gameId);
+  await broadcastStates(io, gameService, gameId);
 }
 
-function broadcastStates(
+async function broadcastStates(
   io: GameServer,
   gameService: GameService,
   gameId: string,
-): void {
-  const room = gameService.getRoom(gameId);
+): Promise<void> {
+  const room = await gameService.getRoom(gameId);
   if (!room) return;
 
   for (const [seat, socketId] of room.playerSockets) {
-    const state = gameService.getVisibleState(gameId, seat);
+    const state = await gameService.getVisibleState(gameId, seat);
     io.to(socketId).emit('game:state', state);
   }
 }

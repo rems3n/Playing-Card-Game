@@ -170,6 +170,32 @@ export abstract class GameEngine {
     return this.events;
   }
 
+  /** Serialize engine state for storage (Redis). Override for extra fields. */
+  serialize(): Record<string, unknown> {
+    return {
+      state: this.state,
+      events: this.events,
+      sequenceCounter: this.sequenceCounter,
+    };
+  }
+
+  /** Restore engine state from serialized data. Override for extra fields. */
+  restore(data: Record<string, unknown>): void {
+    this.state = data.state as GameState;
+    this.events = (data.events as GameEvent[]) ?? [];
+    this.sequenceCounter = (data.sequenceCounter as number) ?? this.events.length;
+    // Rebuild state machine to current phase
+    this.stateMachine = this.createStateMachine();
+    // Fast-forward state machine to current phase
+    this.forcePhase(this.state.phase);
+  }
+
+  /** Force state machine to a specific phase (for restoration). */
+  private forcePhase(phase: GamePhase): void {
+    this.stateMachine = this.createStateMachine();
+    this.stateMachine.forcePhase(phase);
+  }
+
   getVisibleState(seatIndex: number): VisibleGameState {
     const players: VisiblePlayerState[] = this.state.players.map((p) => ({
       seatIndex: p.seatIndex,

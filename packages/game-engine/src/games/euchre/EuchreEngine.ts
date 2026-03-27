@@ -416,4 +416,24 @@ export class EuchreEngine extends GameEngine {
   isGoingAlone(): boolean {
     return this.goingAlone;
   }
+
+  override serialize(): Record<string, unknown> {
+    return {
+      ...super.serialize(),
+      maker: this.maker,
+      goingAlone: this.goingAlone,
+      alonePlayer: this.alonePlayer,
+      trumpCallRound: this.trumpCallRound,
+      turnedUpCard: this.turnedUpCard,
+    };
+  }
+
+  override restore(data: Record<string, unknown>): void {
+    super.restore(data);
+    this.maker = (data.maker as number) ?? 0;
+    this.goingAlone = (data.goingAlone as boolean) ?? false;
+    this.alonePlayer = (data.alonePlayer as number) ?? -1;
+    this.trumpCallRound = (data.trumpCallRound as number) ?? 1;
+    this.turnedUpCard = (data.turnedUpCard as Card) ?? null;
+  }
 }

@@ -8,13 +8,14 @@ import {
   GameType,
   Suit,
 } from '@card-game/shared-types';
-import { HeartsEngine, SpadesEngine, EuchreEngine, type GameEngine } from '@card-game/game-engine';
+import { HeartsEngine, SpadesEngine, EuchreEngine } from '@card-game/game-engine';
 import {
   createAIPlayer,
   type AIPlayer,
   shouldCallTrump,
   chooseTrumpSuit,
 } from '@card-game/ai';
+import { GameStateStore, type SerializedGame } from './GameStateStore.js';
 
 type AnyEngine = HeartsEngine | SpadesEngine | EuchreEngine;
 
@@ -27,7 +28,96 @@ export interface GameRoom {
 }
 
 export class GameService {
-  private games = new Map<string, GameRoom>();
+  private games = new Map<string, GameRoom>(); // in-memory cache
+  private store = new GameStateStore();
+
+  // ── Persistence helpers ──
+
+  /** Save current game state to Redis. */
+  private async persist(gameId: string): Promise<void> {
+    const room = this.games.get(gameId);
+    if (!room) return;
+
+    const data: SerializedGame = {
+      gameId,
+      gameType: room.gameType,
+      engineData: room.engine.serialize(),
+      aiSeats: Array.from(room.aiPlayers.entries()).map(([seat, ai]) => ({
+        seat,
+        difficulty: ai.difficulty,
+        displayName: ai.displayName,
+      })),
+      playerMappings: Array.from(room.playerSockets.entries()).map(([seat, socketId]) => {
+        const state = room.engine.getState();
+        const player = state.players[seat];
+        return {
+          seat,
+          socketId,
+          userId: player?.userId ?? null,
+          displayName: player?.displayName ?? 'Player',
+        };
+      }),
+    };
+
+    await this.store.save(gameId, data);
+  }
+
+  /** Load a game from Redis into memory if not already cached. */
+  private async ensureLoaded(gameId: string): Promise<GameRoom | undefined> {
+    // Check memory cache first
+    const cached = this.games.get(gameId);
+    if (cached) return cached;
+
+    // Try Redis
+    const data = await this.store.load(gameId);
+    if (!data) return undefined;
+
+    return this.restoreFromData(data);
+  }
+
+  /** Reconstruct a GameRoom from serialized data. */
+  private restoreFromData(data: SerializedGame): GameRoom {
+    let engine: AnyEngine;
+    switch (data.gameType) {
+      case GameType.Hearts:
+        engine = new HeartsEngine(data.gameId);
+        break;
+      case GameType.Spades:
+        engine = new SpadesEngine(data.gameId);
+        break;
+      case GameType.Euchre:
+        engine = new EuchreEngine(data.gameId);
+        break;
+      default:
+        throw new Error(`Unknown game type: ${data.gameType}`);
+    }
+    engine.restore(data.engineData);
+
+    const aiPlayers = new Map<number, AIPlayer>();
+    for (const ai of data.aiSeats) {
+      aiPlayers.set(ai.seat, createAIPlayer(ai.difficulty, ai.displayName));
+    }
+
+    const playerSockets = new Map<number, string>();
+    const socketSeats = new Map<string, number>();
+    for (const mapping of data.playerMappings) {
+      playerSockets.set(mapping.seat, mapping.socketId);
+      socketSeats.set(mapping.socketId, mapping.seat);
+    }
+
+    const room: GameRoom = {
+      engine,
+      gameType: data.gameType,
+      aiPlayers,
+      playerSockets,
+      socketSeats,
+    };
+
+    this.games.set(data.gameId, room);
+    return room;
+  }
+
+  // ── Public API ──
 
   createGame(
     gameType: GameType,
@@ -63,32 +153,38 @@ export class GameService {
     return gameId;
   }
 
-  getRoom(gameId: string): GameRoom | undefined {
+  async getRoom(gameId: string): Promise<GameRoom | undefined> {
+    return this.ensureLoaded(gameId);
+  }
+
+  // Sync version for backward compatibility in socket handlers
+  getRoomSync(gameId: string): GameRoom | undefined {
     return this.games.get(gameId);
   }
 
-  joinGame(
+  async joinGame(
     gameId: string,
     socketId: string,
     displayName: string,
     userId?: string,
-  ): number {
-    const room = this.games.get(gameId);
+  ): Promise<number> {
+    const room = await this.ensureLoaded(gameId);
     if (!room) throw new Error('Game not found');
 
     // Check if this socket is already in the game
     const existingSeat = room.socketSeats.get(socketId);
     if (existingSeat !== undefined) return existingSeat;
 
-    // Check if this user is already in the game (reconnecting with a new socket)
+    // Check if this user is already in the game (reconnecting with new socket)
     if (userId) {
-      for (const [seat, sid] of room.playerSockets) {
+      for (const [seat] of room.playerSockets) {
         const state = room.engine.getState();
         if (state.players[seat].userId === userId) {
-          // Update socket mapping
-          room.socketSeats.delete(sid);
+          const oldSid = room.playerSockets.get(seat);
+          if (oldSid) room.socketSeats.delete(oldSid);
           room.playerSockets.set(seat, socketId);
           room.socketSeats.set(socketId, seat);
+          await this.persist(gameId);
           return seat;
         }
       }
@@ -108,11 +204,12 @@ export class GameService {
     room.playerSockets.set(seat, socketId);
     room.socketSeats.set(socketId, seat);
 
+    await this.persist(gameId);
     return seat;
   }
 
-  fillWithAI(gameId: string, difficulty: AIDifficulty): void {
-    const room = this.games.get(gameId);
+  async fillWithAI(gameId: string, difficulty: AIDifficulty): Promise<void> {
+    const room = await this.ensureLoaded(gameId);
     if (!room) throw new Error('Game not found');
 
     const botNames = ['Dealer Danny', 'Lucky Lucy', 'Card Shark Sally', 'Steady Steve'];
@@ -126,74 +223,118 @@ export class GameService {
         room.engine.setPlayer(seat, null, ai.displayName, true);
       }
     }
+
+    await this.persist(gameId);
   }
 
-  startGame(gameId: string): void {
-    const room = this.games.get(gameId);
+  async startGame(gameId: string): Promise<void> {
+    const room = await this.ensureLoaded(gameId);
     if (!room) throw new Error('Game not found');
     room.engine.startGame();
+    await this.persist(gameId);
   }
 
-  playCard(gameId: string, seatIndex: number, card: Card): void {
-    const room = this.games.get(gameId);
+  async playCard(gameId: string, seatIndex: number, card: Card): Promise<void> {
+    const room = await this.ensureLoaded(gameId);
     if (!room) throw new Error('Game not found');
     room.engine.playCard(seatIndex, card);
+    await this.persist(gameId);
   }
 
-  passCards(gameId: string, seatIndex: number, cards: Card[]): void {
-    const room = this.games.get(gameId);
+  async passCards(gameId: string, seatIndex: number, cards: Card[]): Promise<void> {
+    const room = await this.ensureLoaded(gameId);
     if (!room) throw new Error('Game not found');
     if (!(room.engine instanceof HeartsEngine)) throw new Error('Not a Hearts game');
     room.engine.passCards(seatIndex, cards);
+    await this.persist(gameId);
   }
 
-  placeBid(gameId: string, seatIndex: number, bid: number): void {
-    const room = this.games.get(gameId);
+  async placeBid(gameId: string, seatIndex: number, bid: number): Promise<void> {
+    const room = await this.ensureLoaded(gameId);
     if (!room) throw new Error('Game not found');
     if (!(room.engine instanceof SpadesEngine)) throw new Error('Not a Spades game');
     room.engine.placeBid(seatIndex, bid);
+    await this.persist(gameId);
   }
 
-  callTrump(gameId: string, seatIndex: number, suit: Suit | 'pass'): void {
-    const room = this.games.get(gameId);
+  async callTrump(gameId: string, seatIndex: number, suit: Suit | 'pass'): Promise<void> {
+    const room = await this.ensureLoaded(gameId);
     if (!room) throw new Error('Game not found');
     if (!(room.engine instanceof EuchreEngine)) throw new Error('Not a Euchre game');
     room.engine.callTrump(seatIndex, suit);
+    await this.persist(gameId);
   }
 
-  getVisibleState(gameId: string, seatIndex: number): VisibleGameState {
-    const room = this.games.get(gameId);
+  async getVisibleState(gameId: string, seatIndex: number): Promise<VisibleGameState> {
+    const room = await this.ensureLoaded(gameId);
     if (!room) throw new Error('Game not found');
     return room.engine.getVisibleState(seatIndex);
   }
 
-  getPhase(gameId: string): GamePhase {
-    const room = this.games.get(gameId);
+  async getPhase(gameId: string): Promise<GamePhase> {
+    const room = await this.ensureLoaded(gameId);
     if (!room) throw new Error('Game not found');
     return room.engine.getState().phase;
   }
 
-  getCurrentSeat(gameId: string): number {
-    const room = this.games.get(gameId);
+  async getCurrentSeat(gameId: string): Promise<number> {
+    const room = await this.ensureLoaded(gameId);
     if (!room) throw new Error('Game not found');
     return room.engine.getState().currentPlayerSeat;
   }
 
-  getSeatForSocket(gameId: string, socketId: string): number | undefined {
-    const room = this.games.get(gameId);
+  async getSeatForSocket(gameId: string, socketId: string): Promise<number | undefined> {
+    const room = await this.ensureLoaded(gameId);
     if (!room) return undefined;
     return room.socketSeats.get(socketId);
   }
 
-  /**
-   * Execute AI turns — handles passing, bidding, trump calling, and playing.
-   * onCardPlayed is called after each AI card play so the socket handler can broadcast.
-   */
+  handlePlayerDisconnect(gameId: string, socketId: string): number {
+    const room = this.games.get(gameId);
+    if (!room) return -1;
+    const seat = room.socketSeats.get(socketId);
+    if (seat === undefined) return -1;
+    room.engine.getState().players[seat].isConnected = false;
+    this.persist(gameId).catch(() => {});
+    return seat;
+  }
+
+  async replaceWithAI(gameId: string, seatIndex: number): Promise<void> {
+    const room = await this.ensureLoaded(gameId);
+    if (!room) return;
+
+    const player = room.engine.getState().players[seatIndex];
+    const ai = createAIPlayer(AIDifficulty.Intermediate, player.displayName + ' (AI)');
+    room.aiPlayers.set(seatIndex, ai);
+    room.engine.setPlayer(seatIndex, null, ai.displayName, true);
+
+    const oldSocketId = room.playerSockets.get(seatIndex);
+    if (oldSocketId) room.socketSeats.delete(oldSocketId);
+    room.playerSockets.delete(seatIndex);
+
+    await this.persist(gameId);
+  }
+
+  findGameBySocket(socketId: string): { gameId: string; seat: number } | null {
+    for (const [gameId, room] of this.games) {
+      const seat = room.socketSeats.get(socketId);
+      if (seat !== undefined) return { gameId, seat };
+    }
+    return null;
+  }
+
+  getConnectedHumanCount(gameId: string): number {
+    const room = this.games.get(gameId);
+    if (!room) return 0;
+    return room.playerSockets.size;
+  }
+
+  /** Execute AI turns with persistence after each action. */
   async executeAITurns(
     gameId: string,
     onCardPlayed?: (seatIndex: number, card: Card) => void,
   ): Promise<void> {
-    const room = this.games.get(gameId);
+    const room = await this.ensureLoaded(gameId);
     if (!room) return;
 
     const state = room.engine.getState();
@@ -208,6 +349,7 @@ export class GameService {
           room.engine.passCards(seat, cards);
         }
       }
+      await this.persist(gameId);
       return;
     }
 
@@ -227,6 +369,7 @@ export class GameService {
         currentSeat = newState.currentPlayerSeat;
         ai = room.aiPlayers.get(currentSeat);
       }
+      await this.persist(gameId);
       return;
     }
 
@@ -241,11 +384,9 @@ export class GameService {
         await this.delay(500);
 
         if (turnedUp) {
-          // Decide whether to call or pass
           if (shouldCallTrump(hand, turnedUp.suit)) {
             room.engine.callTrump(currentSeat, turnedUp.suit);
           } else {
-            // Try round 2 suit
             const bestSuit = chooseTrumpSuit(hand, turnedUp.suit);
             if (bestSuit) {
               room.engine.callTrump(currentSeat, bestSuit);
@@ -262,6 +403,7 @@ export class GameService {
         currentSeat = newState.currentPlayerSeat;
         ai = room.aiPlayers.get(currentSeat);
       }
+      await this.persist(gameId);
       return;
     }
 
@@ -275,10 +417,10 @@ export class GameService {
       const visibleState = room.engine.getVisibleState(currentSeat);
       const card = ai.chooseCard(visibleState);
 
-      await this.delay(1500 + Math.random() * 1000); // 1.5-2.5s per AI card
+      await this.delay(1500 + Math.random() * 1000);
       room.engine.playCard(currentSeat, card);
+      await this.persist(gameId);
 
-      // Notify after each card so clients see it appear
       if (onCardPlayed) onCardPlayed(currentSeat, card);
 
       const newState = room.engine.getState();
@@ -293,63 +435,8 @@ export class GameService {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  /**
-   * Mark a player as disconnected (remove socket mapping but keep seat).
-   * Returns the seat index, or -1 if not found.
-   */
-  handlePlayerDisconnect(gameId: string, socketId: string): number {
-    const room = this.games.get(gameId);
-    if (!room) return -1;
-
-    const seat = room.socketSeats.get(socketId);
-    if (seat === undefined) return -1;
-
-    room.engine.getState().players[seat].isConnected = false;
-    // Don't remove socket mapping yet — they might reconnect
-    return seat;
-  }
-
-  /**
-   * Replace a disconnected human player with an AI bot.
-   */
-  replaceWithAI(gameId: string, seatIndex: number): void {
-    const room = this.games.get(gameId);
-    if (!room) return;
-
-    const player = room.engine.getState().players[seatIndex];
-    const ai = createAIPlayer(AIDifficulty.Intermediate, player.displayName + ' (AI)');
-    room.aiPlayers.set(seatIndex, ai);
-    room.engine.setPlayer(seatIndex, null, ai.displayName, true);
-
-    // Remove old socket mapping
-    const oldSocketId = room.playerSockets.get(seatIndex);
-    if (oldSocketId) {
-      room.socketSeats.delete(oldSocketId);
-    }
-    room.playerSockets.delete(seatIndex);
-  }
-
-  /**
-   * Find which game a socket is in. Returns { gameId, seat } or null.
-   */
-  findGameBySocket(socketId: string): { gameId: string; seat: number } | null {
-    for (const [gameId, room] of this.games) {
-      const seat = room.socketSeats.get(socketId);
-      if (seat !== undefined) return { gameId, seat };
-    }
-    return null;
-  }
-
-  /**
-   * Check if there are any human players still connected in a game.
-   */
-  getConnectedHumanCount(gameId: string): number {
-    const room = this.games.get(gameId);
-    if (!room) return 0;
-    return room.playerSockets.size;
-  }
-
-  removeGame(gameId: string): void {
+  async removeGame(gameId: string): Promise<void> {
     this.games.delete(gameId);
+    await this.store.remove(gameId);
   }
 }
