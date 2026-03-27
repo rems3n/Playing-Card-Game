@@ -580,9 +580,16 @@ export function setupGameHandlers(
 
         await gameService.passCards(gameId, seat, cards);
 
-        const phase = await gameService.getPhase(gameId);
+        // Handle AI passing (they might not have passed yet in this round)
+        let phase = await gameService.getPhase(gameId);
+        if (phase === GamePhase.Passing) {
+          await gameService.executeAITurns(gameId);
+          phase = await gameService.getPhase(gameId);
+        }
+
+        await broadcastStates(io, gameService, gameId);
+
         if (phase === GamePhase.Playing) {
-          broadcastStates(io, gameService, gameId);
           await handleAITurns(io, gameService, gameId);
         }
       } catch (err: any) {
