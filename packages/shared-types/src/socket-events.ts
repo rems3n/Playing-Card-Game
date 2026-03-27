@@ -43,6 +43,8 @@ export interface ClientToServerEvents {
     config?: Partial<GameConfig>;
   }) => void;
   'matchmaking:cancel': () => void;
+  'matchmaking:accept': (data: { matchId: string }) => void;
+  'matchmaking:decline': (data: { matchId: string }) => void;
 
   'lobby:create_game': (data: {
     gameType: GameType;
@@ -112,6 +114,14 @@ export interface ServerToClientEvents {
     opponents: Array<{ displayName: string; seatIndex: number }>;
   }) => void;
   'matchmaking:waiting': (data: { position: number }) => void;
+  'matchmaking:proposed': (data: {
+    matchId: string;
+    gameType: GameType;
+    players: Array<{ displayName: string }>;
+    expiresIn: number;
+  }) => void;
+  'matchmaking:accepted': (data: { matchId: string; acceptedCount: number; totalCount: number }) => void;
+  'matchmaking:declined': (data: { matchId: string; reason: string }) => void;
 
   'lobby:game_created': (data: { gameId: string }) => void;
 

@@ -59,6 +59,14 @@ export default function LobbyPage() {
   const [gameSearch, setGameSearch] = useState('');
   const [gameDropdownOpen, setGameDropdownOpen] = useState(false);
   const [joinCode, setJoinCode] = useState('');
+  const [matchProposal, setMatchProposal] = useState<{
+    matchId: string;
+    gameType: string;
+    players: Array<{ displayName: string }>;
+    expiresIn: number;
+    acceptedCount: number;
+  } | null>(null);
+  const [proposalTimer, setProposalTimer] = useState(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown on outside click
@@ -76,12 +84,34 @@ export default function LobbyPage() {
   useEffect(() => {
     socket.on('matchmaking:found', ({ gameId }) => {
       setMatchmaking(false);
+      setMatchProposal(null);
       setGameId(gameId);
       router.push(`/game/${gameId}`);
     });
 
     socket.on('matchmaking:waiting', ({ position }) => {
       setQueuePosition(position);
+    });
+
+    socket.on('matchmaking:proposed', (data) => {
+      setMatchmaking(false);
+      setMatchProposal({
+        matchId: data.matchId,
+        gameType: data.gameType,
+        players: data.players,
+        expiresIn: data.expiresIn,
+        acceptedCount: 0,
+      });
+      setProposalTimer(data.expiresIn);
+    });
+
+    socket.on('matchmaking:accepted', ({ matchId, acceptedCount, totalCount }) => {
+      setMatchProposal((prev) => prev?.matchId === matchId ? { ...prev, acceptedCount } : prev);
+    });
+
+    socket.on('matchmaking:declined', ({ matchId, reason }) => {
+      setMatchProposal(null);
+      setMatchmaking(false);
     });
 
     socket.on('room:created', ({ roomId }) => {
@@ -91,9 +121,21 @@ export default function LobbyPage() {
     return () => {
       socket.off('matchmaking:found');
       socket.off('matchmaking:waiting');
+      socket.off('matchmaking:proposed');
+      socket.off('matchmaking:accepted');
+      socket.off('matchmaking:declined');
       socket.off('room:created');
     };
   }, [socket, setGameId, router]);
+
+  // Countdown timer for match proposal
+  useEffect(() => {
+    if (!matchProposal || proposalTimer <= 0) return;
+    const interval = setInterval(() => {
+      setProposalTimer((t) => Math.max(0, t - 1));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [matchProposal, proposalTimer]);
 
   const handleCreateRoom = () => {
     socket.emit('room:create', { gameType: selectedGame });
@@ -300,6 +342,53 @@ export default function LobbyPage() {
                     </div>
                   </button>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Match proposal modal */}
+          {matchProposal && (
+            <div className="mb-6 bg-[var(--bg-secondary)] rounded-xl border border-[var(--accent-gold)]/30 p-5">
+              <div className="text-center mb-4">
+                <div className="text-sm font-semibold text-[var(--accent-gold)] mb-1">Match Found!</div>
+                <div className="text-xs text-[var(--text-secondary)]">
+                  {proposalTimer > 0
+                    ? `Accept within ${proposalTimer}s`
+                    : 'Waiting for response...'}
+                </div>
+              </div>
+
+              <div className="flex justify-center gap-3 mb-4">
+                {matchProposal.players.map((p, i) => (
+                  <div key={i} className="flex flex-col items-center gap-1">
+                    <div className="w-10 h-10 rounded-full bg-[var(--accent-blue)]/50 flex items-center justify-center text-sm font-bold">
+                      {p.displayName[0]?.toUpperCase() ?? '?'}
+                    </div>
+                    <span className="text-[11px] text-[var(--text-secondary)] max-w-[80px] truncate">{p.displayName}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="text-center text-[11px] text-[var(--text-muted)] mb-3">
+                {matchProposal.acceptedCount}/{matchProposal.players.length} accepted
+              </div>
+
+              <div className="flex justify-center gap-3">
+                <button
+                  onClick={() => socket.emit('matchmaking:accept' as any, { matchId: matchProposal.matchId })}
+                  className="px-6 py-2 text-sm font-semibold bg-[var(--accent-green)] text-white rounded-lg hover:brightness-110 transition-all"
+                >
+                  Accept
+                </button>
+                <button
+                  onClick={() => {
+                    socket.emit('matchmaking:decline' as any, { matchId: matchProposal.matchId });
+                    setMatchProposal(null);
+                  }}
+                  className="px-6 py-2 text-sm border border-[var(--border-subtle)] rounded-lg hover:bg-white/[0.04] transition-colors"
+                >
+                  Decline
+                </button>
               </div>
             </div>
           )}

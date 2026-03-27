@@ -38,6 +38,17 @@ interface WaitingRoom {
 const waitingRooms = new Map<string, WaitingRoom>();
 const disconnectTimers = new Map<string, NodeJS.Timeout>(); // `gameId:seat` → timer
 const RECONNECT_TIMEOUT = 30_000; // 30 seconds
+const MATCH_ACCEPT_TIMEOUT = 15_000; // 15 seconds to accept
+
+// Pending match proposals
+interface PendingMatch {
+  matchId: string;
+  gameType: GameType;
+  players: Array<{ socketId: string; displayName: string; userId: string | null }>;
+  accepted: Set<string>; // socketIds that accepted
+  timer: NodeJS.Timeout;
+}
+const pendingMatches = new Map<string, PendingMatch>();
 
 export function setupGameHandlers(
   io: GameServer,
@@ -97,82 +108,180 @@ export function setupGameHandlers(
           socketId: socket.id,
           userId,
           displayName,
-          rating: 1500, // TODO: fetch real rating
+          rating: 1500,
           joinedAt: Date.now(),
         });
 
         const position = await matchmakingService.getPosition(gameType, socket.id);
         socket.emit('matchmaking:waiting', { position: position ?? 1 });
 
-        // Try to find a match — need at least 2 human players, fill rest with AI
+        // Try to propose a match — need at least 2 humans
         const MIN_HUMANS = 2;
         const totalPlayers = PLAYERS_PER_GAME[gameType] ?? 4;
         const queueSize = await matchmakingService.getQueueSize(gameType);
 
         if (queueSize >= MIN_HUMANS) {
-          // Pull up to totalPlayers humans from queue, or as many as available
           const humanCount = Math.min(queueSize, totalPlayers);
           const matched = await matchmakingService.tryMatch(gameType, humanCount);
 
           if (matched) {
-            const gameId = gameService.createGame(gameType as GameType);
+            // Create a match proposal — players must accept
+            const matchId = uuidv4().slice(0, 8);
+            const players = matched.map((m) => ({
+              socketId: m.socketId,
+              displayName: m.displayName,
+              userId: m.userId,
+            }));
 
-            for (const entry of matched) {
-              gameService.joinGame(
-                gameId,
-                entry.socketId,
-                entry.displayName,
-                entry.userId ?? undefined,
-              );
+            const timer = setTimeout(() => {
+              // Timeout — decline the match, put players back in queue
+              const pending = pendingMatches.get(matchId);
+              if (!pending) return;
+              pendingMatches.delete(matchId);
 
-              const entrySocket = io.sockets.sockets.get(entry.socketId);
-              if (entrySocket) {
-                await entrySocket.join(gameId);
-              }
-            }
-
-            // Fill remaining seats with AI
-            if (matched.length < totalPlayers) {
-              gameService.fillWithAI(gameId, AIDifficulty.Intermediate);
-            }
-
-            gameService.startGame(gameId);
-
-            // Notify all matched players
-            for (const entry of matched) {
-              const entrySocket = io.sockets.sockets.get(entry.socketId);
-              if (entrySocket) {
-                const seat = gameService.getSeatForSocket(gameId, entry.socketId);
-                if (seat !== undefined) {
-                  entrySocket.emit('matchmaking:found', {
-                    gameId,
-                    opponents: matched
-                      .filter((m) => m.socketId !== entry.socketId)
-                      .map((m) => ({
-                        displayName: m.displayName,
-                        seatIndex: gameService.getSeatForSocket(gameId, m.socketId) ?? 0,
-                      })),
+              for (const player of pending.players) {
+                const s = io.sockets.sockets.get(player.socketId);
+                if (s) {
+                  s.emit('matchmaking:declined', { matchId, reason: 'Timed out — not all players accepted' });
+                  // Put them back in queue
+                  matchmakingService.joinQueue(gameType, {
+                    socketId: player.socketId,
+                    userId: player.userId,
+                    displayName: player.displayName,
+                    rating: 1500,
+                    joinedAt: Date.now(),
                   });
-                  entrySocket.emit('game:state', gameService.getVisibleState(gameId, seat));
                 }
               }
-            }
+            }, MATCH_ACCEPT_TIMEOUT);
 
-            // Execute AI turns if needed (passing/bidding phase)
-            await handleAITurns(io, gameService, gameId);
+            pendingMatches.set(matchId, {
+              matchId,
+              gameType: gameType as GameType,
+              players,
+              accepted: new Set(),
+              timer,
+            });
+
+            // Notify all matched players — they must accept
+            for (const player of players) {
+              const s = io.sockets.sockets.get(player.socketId);
+              if (s) {
+                s.emit('matchmaking:proposed', {
+                  matchId,
+                  gameType: gameType as GameType,
+                  players: players.map((p) => ({ displayName: p.displayName })),
+                  expiresIn: MATCH_ACCEPT_TIMEOUT / 1000,
+                });
+              }
+            }
           }
         }
       } catch (err: any) {
-        socket.emit('game:error', {
-          code: 'MATCHMAKING_FAILED',
-          message: err.message,
-        });
+        socket.emit('game:error', { code: 'MATCHMAKING_FAILED', message: err.message });
+      }
+    });
+
+    // ── Accept a match proposal ──
+    socket.on('matchmaking:accept', async (data) => {
+      const pending = pendingMatches.get(data.matchId);
+      if (!pending) return;
+
+      pending.accepted.add(socket.id);
+
+      // Notify others of progress
+      for (const player of pending.players) {
+        const s = io.sockets.sockets.get(player.socketId);
+        if (s) {
+          s.emit('matchmaking:accepted', {
+            matchId: data.matchId,
+            acceptedCount: pending.accepted.size,
+            totalCount: pending.players.length,
+          });
+        }
+      }
+
+      // Check if everyone accepted
+      if (pending.accepted.size === pending.players.length) {
+        clearTimeout(pending.timer);
+        pendingMatches.delete(data.matchId);
+
+        // Create the game
+        const totalPlayers = PLAYERS_PER_GAME[pending.gameType] ?? 4;
+        const gameId = gameService.createGame(pending.gameType);
+
+        for (const player of pending.players) {
+          gameService.joinGame(gameId, player.socketId, player.displayName, player.userId ?? undefined);
+          const s = io.sockets.sockets.get(player.socketId);
+          if (s) await s.join(gameId);
+        }
+
+        if (pending.players.length < totalPlayers) {
+          gameService.fillWithAI(gameId, AIDifficulty.Intermediate);
+        }
+
+        gameService.startGame(gameId);
+
+        // Notify all players
+        for (const player of pending.players) {
+          const s = io.sockets.sockets.get(player.socketId);
+          if (s) {
+            const seat = gameService.getSeatForSocket(gameId, player.socketId);
+            if (seat !== undefined) {
+              s.emit('matchmaking:found', {
+                gameId,
+                opponents: pending.players
+                  .filter((p) => p.socketId !== player.socketId)
+                  .map((p) => ({ displayName: p.displayName, seatIndex: gameService.getSeatForSocket(gameId, p.socketId) ?? 0 })),
+              });
+              s.emit('game:state', gameService.getVisibleState(gameId, seat));
+            }
+          }
+        }
+
+        await handleAITurns(io, gameService, gameId);
+      }
+    });
+
+    // ── Decline a match proposal ──
+    socket.on('matchmaking:decline', async (data) => {
+      const pending = pendingMatches.get(data.matchId);
+      if (!pending) return;
+
+      clearTimeout(pending.timer);
+      pendingMatches.delete(data.matchId);
+
+      // Put non-declining players back in queue, notify everyone
+      for (const player of pending.players) {
+        const s = io.sockets.sockets.get(player.socketId);
+        if (s) {
+          if (player.socketId === socket.id) {
+            s.emit('matchmaking:declined', { matchId: data.matchId, reason: 'You declined' });
+          } else {
+            s.emit('matchmaking:declined', { matchId: data.matchId, reason: 'A player declined' });
+            // Put them back in queue
+            matchmakingService.joinQueue(pending.gameType, {
+              socketId: player.socketId,
+              userId: player.userId,
+              displayName: player.displayName,
+              rating: 1500,
+              joinedAt: Date.now(),
+            });
+          }
+        }
       }
     });
 
     // ── Cancel matchmaking ──
     socket.on('matchmaking:cancel', async () => {
       await matchmakingService.leaveAllQueues(socket.id);
+
+      // Also decline any pending matches
+      for (const [matchId, pending] of pendingMatches) {
+        if (pending.players.some((p) => p.socketId === socket.id)) {
+          socket.emit('matchmaking:decline' as any, { matchId });
+        }
+      }
     });
 
     // ── Create a waiting room ──
