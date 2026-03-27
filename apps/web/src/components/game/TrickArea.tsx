@@ -37,7 +37,7 @@ export function TrickArea({ currentTrick, mySeat, numPlayers, scale = 1 }: Trick
             key={`${card.suit}${card.rank}`}
             className={`absolute ${POSITIONS[relative] ?? ''} ${ANIM_CLASS[relative] ?? ''}`}
           >
-            <PlayingCard card={card} disabled scale={scale} />
+            <PlayingCard card={card} scale={scale} />
           </div>
         );
       })}

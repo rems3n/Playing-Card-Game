@@ -284,13 +284,16 @@ export function GameBoard() {
                   {gameState.myHand.map((card) => {
                     const legal = isCardLegal(card);
                     const isSelected = selectedCards.some((c) => c.suit === card.suit && c.rank === card.rank);
+                    // Only dim cards that are illegal when it's your turn to play
+                    // During bidding, waiting, or passing: all cards stay bright
+                    const dimmed = isMyTurn && !legal;
                     return (
                       <PlayingCard
                         key={`${card.suit}${card.rank}`}
                         card={card}
                         scale={scale}
                         selected={isSelected}
-                        disabled={isPassing ? false : !isMyTurn || !legal}
+                        disabled={dimmed}
                         onClick={() => {
                           if (isPassing) toggleCardSelection(card);
                           else if (isMyTurn && legal) handlePlayCard(card);
