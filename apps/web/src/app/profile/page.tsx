@@ -6,6 +6,29 @@ import { RatingChart } from '@/components/RatingChart';
 
 const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL ?? 'http://localhost:3001';
 
+/** Resize an image file to a square and return as a base64 data URL. */
+function resizeImageToDataUrl(file: File, maxSize: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = maxSize;
+      canvas.height = maxSize;
+      const ctx = canvas.getContext('2d')!;
+
+      // Crop to square from center
+      const size = Math.min(img.width, img.height);
+      const sx = (img.width - size) / 2;
+      const sy = (img.height - size) / 2;
+      ctx.drawImage(img, sx, sy, size, size, 0, 0, maxSize, maxSize);
+
+      resolve(canvas.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => reject(new Error('Failed to load image'));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
 interface DbProfile {
   id: string;
   email: string;
@@ -226,7 +249,7 @@ export default function ProfilePage() {
   }[usernameStatus];
 
   const resolveAvatar = (url: string) =>
-    url.startsWith('/') ? `${SERVER_URL}${url}` : url;
+    url.startsWith('/uploads/') ? `${SERVER_URL}${url}` : url;
 
   return (
     <div className="max-w-3xl mx-auto p-6">
@@ -328,20 +351,11 @@ export default function ProfilePage() {
                 setUploading(true);
                 setSaveMessage(null);
                 try {
-                  const formData = new FormData();
-                  formData.append('file', file);
-                  const res = await fetch(`${SERVER_URL}/api/upload/avatar`, {
-                    method: 'POST',
-                    body: formData,
-                  });
-                  const data = await res.json();
-                  if (data.success) {
-                    setAvatarUrl(data.url);
-                  } else {
-                    setSaveMessage({ type: 'error', text: data.error || 'Upload failed' });
-                  }
+                  // Resize image client-side and convert to base64 data URL
+                  const dataUrl = await resizeImageToDataUrl(file, 200);
+                  setAvatarUrl(dataUrl);
                 } catch {
-                  setSaveMessage({ type: 'error', text: 'Upload failed. Is the server running?' });
+                  setSaveMessage({ type: 'error', text: 'Failed to process image' });
                 } finally {
                   setUploading(false);
                   e.target.value = '';
