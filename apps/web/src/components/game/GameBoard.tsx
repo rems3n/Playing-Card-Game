@@ -296,7 +296,7 @@ export function GameBoard() {
                         disabled={dimmed}
                         onClick={() => {
                           if (isPassing) toggleCardSelection(card);
-                          else if (isMyTurn && legal) handlePlayCard(card);
+                          else if (isMyTurn && !isBidding && legal) handlePlayCard(card);
                         }}
                       />
                     );

@@ -90,7 +90,15 @@ export function setupGameHandlers(
         const state = gameService.getVisibleState(gameId, seat);
         socket.emit('game:state', state);
 
+        // Handle AI turns (passing in Hearts, bidding in Spades/Euchre)
         await handleAITurns(io, gameService, gameId);
+        broadcastStates(io, gameService, gameId);
+
+        // If AI bidding finished and transitioned to playing, handle AI card plays
+        const phase = gameService.getPhase(gameId);
+        if (phase === GamePhase.Playing) {
+          await handleAITurns(io, gameService, gameId);
+        }
       } catch (err: any) {
         socket.emit('game:error', {
           code: 'CREATE_FAILED',
@@ -592,13 +600,17 @@ export function setupGameHandlers(
         }
 
         gameService.placeBid(gameId, seat, typeof bid === 'number' ? bid : 0);
-
         broadcastStates(io, gameService, gameId);
-        await handleAITurns(io, gameService, gameId);
 
-        // After AI bidding, broadcast again and start AI playing if needed
-        broadcastStates(io, gameService, gameId);
+        // Handle AI bidding (if more AI need to bid after the human)
         await handleAITurns(io, gameService, gameId);
+        broadcastStates(io, gameService, gameId);
+
+        // If bidding finished and transitioned to playing, handle AI plays
+        const phase = gameService.getPhase(gameId);
+        if (phase === GamePhase.Playing) {
+          await handleAITurns(io, gameService, gameId);
+        }
       } catch (err: any) {
         socket.emit('game:error', { code: 'BID_FAILED', message: err.message });
       }
@@ -615,13 +627,17 @@ export function setupGameHandlers(
         }
 
         gameService.callTrump(gameId, seat, suit as any);
-
         broadcastStates(io, gameService, gameId);
-        await handleAITurns(io, gameService, gameId);
 
-        // After AI trump calling, broadcast and handle AI plays
-        broadcastStates(io, gameService, gameId);
+        // Handle remaining AI trump calls
         await handleAITurns(io, gameService, gameId);
+        broadcastStates(io, gameService, gameId);
+
+        // If trump calling finished and transitioned to playing, handle AI plays
+        const phase = gameService.getPhase(gameId);
+        if (phase === GamePhase.Playing) {
+          await handleAITurns(io, gameService, gameId);
+        }
       } catch (err: any) {
         socket.emit('game:error', { code: 'TRUMP_FAILED', message: err.message });
       }
