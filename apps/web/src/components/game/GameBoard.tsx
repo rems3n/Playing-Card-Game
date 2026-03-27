@@ -228,11 +228,6 @@ export function GameBoard() {
           </div>
         </div>
 
-        {/* Bidding panel */}
-        {isBidding && (
-          <BiddingPanel gameState={gameState} onBid={handleBid} onCallTrump={handleCallTrump} />
-        )}
-
         {/* Game table — seamless surface */}
         <div
           ref={tableRef}
@@ -246,6 +241,13 @@ export function GameBoard() {
           }}
         >
           <div className="relative flex flex-col h-full" style={{ padding: `${scale * 16}px` }}>
+
+            {/* Bidding overlay */}
+            {isBidding && (
+              <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/40 rounded-xl">
+                <BiddingPanel gameState={gameState} onBid={handleBid} onCallTrump={handleCallTrump} />
+              </div>
+            )}
 
             {/* Top player */}
             <div className="flex justify-center">
