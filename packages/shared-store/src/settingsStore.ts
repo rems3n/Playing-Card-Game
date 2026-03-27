@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 export interface TableColor {
   name: string;
@@ -39,9 +40,16 @@ interface SettingsStore {
   setCardBack: (design: CardBackDesign) => void;
 }
 
-export const useSettingsStore = create<SettingsStore>((set) => ({
-  tableColor: TABLE_COLORS[0],
-  cardBack: CARD_BACK_DESIGNS[0],
-  setTableColor: (color) => set({ tableColor: color }),
-  setCardBack: (design) => set({ cardBack: design }),
-}));
+export const useSettingsStore = create<SettingsStore>()(
+  persist(
+    (set) => ({
+      tableColor: TABLE_COLORS[0],
+      cardBack: CARD_BACK_DESIGNS[0],
+      setTableColor: (color) => set({ tableColor: color }),
+      setCardBack: (design) => set({ cardBack: design }),
+    }),
+    {
+      name: 'cardarena-settings',
+    },
+  ),
+);
