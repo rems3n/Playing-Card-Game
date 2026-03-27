@@ -39,10 +39,25 @@ body {
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-@keyframes card-play {
-  0% { opacity: 0; transform: translateY(10px) scale(0.7); }
-  60% { opacity: 1; transform: translateY(-2px) scale(1.02); }
+@keyframes card-play-from-bottom {
+  0% { opacity: 0; transform: translateY(60px) scale(0.6); }
+  70% { opacity: 1; transform: translateY(-4px) scale(1.03); }
   100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes card-play-from-top {
+  0% { opacity: 0; transform: translateY(-60px) scale(0.6); }
+  70% { opacity: 1; transform: translateY(4px) scale(1.03); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes card-play-from-left {
+  0% { opacity: 0; transform: translateX(-60px) scale(0.6); }
+  70% { opacity: 1; transform: translateX(4px) scale(1.03); }
+  100% { opacity: 1; transform: translateX(0) scale(1); }
+}
+@keyframes card-play-from-right {
+  0% { opacity: 0; transform: translateX(60px) scale(0.6); }
+  70% { opacity: 1; transform: translateX(-4px) scale(1.03); }
+  100% { opacity: 1; transform: translateX(0) scale(1); }
 }
 
 @keyframes score-pop {
@@ -62,7 +77,10 @@ body {
 }
 
 .animate-card-deal { animation: card-deal 0.5s cubic-bezier(0.22, 0.61, 0.36, 1); }
-.animate-card-play { animation: card-play 0.5s cubic-bezier(0.22, 0.61, 0.36, 1); }
+.animate-card-from-bottom { animation: card-play-from-bottom 0.6s cubic-bezier(0.22, 0.61, 0.36, 1); }
+.animate-card-from-top { animation: card-play-from-top 0.6s cubic-bezier(0.22, 0.61, 0.36, 1); }
+.animate-card-from-left { animation: card-play-from-left 0.6s cubic-bezier(0.22, 0.61, 0.36, 1); }
+.animate-card-from-right { animation: card-play-from-right 0.6s cubic-bezier(0.22, 0.61, 0.36, 1); }
 .animate-score-pop { animation: score-pop 0.4s ease-out; }
 .animate-fade-in { animation: fade-in 0.2s ease-out; }
 .animate-slide-up { animation: slide-up 0.25s ease-out; }

@@ -17,6 +17,14 @@ const POSITIONS: Record<number, string> = {
   3: 'right-[8%] top-1/2 -translate-y-1/2',
 };
 
+// Animation class based on which direction the card flies in from
+const ANIM_CLASS: Record<number, string> = {
+  0: 'animate-card-from-bottom',
+  1: 'animate-card-from-left',
+  2: 'animate-card-from-top',
+  3: 'animate-card-from-right',
+};
+
 export function TrickArea({ currentTrick, mySeat, numPlayers, scale = 1 }: TrickAreaProps) {
   return (
     <div className="relative shrink-0" style={{ width: 176 * scale, height: 176 * scale }}>
@@ -25,7 +33,7 @@ export function TrickArea({ currentTrick, mySeat, numPlayers, scale = 1 }: Trick
         return (
           <div
             key={`${card.suit}${card.rank}`}
-            className={`absolute ${POSITIONS[relative] ?? ''} transition-all duration-300 ease-out animate-card-play`}
+            className={`absolute ${POSITIONS[relative] ?? ''} ${ANIM_CLASS[relative] ?? ''}`}
           >
             <PlayingCard card={card} small disabled scale={scale} />
           </div>

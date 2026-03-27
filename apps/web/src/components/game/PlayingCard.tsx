@@ -38,17 +38,21 @@ export function PlayingCard({ card, onClick, selected, disabled, small, scale = 
         height: small ? 58 * s : 80 * s,
         padding: small ? 3 * s : 4 * s,
         borderRadius: 6 * s,
+        transform: selected
+          ? `translateY(${-18 * s}px) scale(1.12)`
+          : undefined,
+        zIndex: selected ? 20 : undefined,
       }}
       className={`
         relative flex flex-col items-center justify-between select-none
-        border transition-all duration-150 ease-out
+        border transition-all duration-200 ease-out
         ${selected
-          ? 'border-[var(--accent-gold)] bg-white shadow-[0_4px_16px_rgba(232,166,58,0.3)]'
+          ? 'border-[var(--accent-gold)] border-2 bg-white shadow-[0_8px_24px_rgba(232,166,58,0.4)]'
           : 'border-[#c8c5c1] bg-[#f7f6f5] shadow-[var(--shadow-card)]'
         }
         ${disabled
           ? 'opacity-40 cursor-default'
-          : 'cursor-pointer hover:shadow-[0_4px_12px_rgba(0,0,0,0.3)]'
+          : 'cursor-pointer hover:-translate-y-2 hover:scale-105 hover:shadow-[0_6px_16px_rgba(0,0,0,0.35)]'
         }
       `}
     >
