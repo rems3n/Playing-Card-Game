@@ -7,18 +7,19 @@ interface TrickAreaProps {
   currentTrick: PlayedCardType[];
   mySeat: number;
   numPlayers: number;
+  scale?: number;
 }
 
 const POSITIONS: Record<number, string> = {
-  0: 'bottom-3 left-1/2 -translate-x-1/2',
-  1: 'left-3 top-1/2 -translate-y-1/2',
-  2: 'top-3 left-1/2 -translate-x-1/2',
-  3: 'right-3 top-1/2 -translate-y-1/2',
+  0: 'bottom-[8%] left-1/2 -translate-x-1/2',
+  1: 'left-[8%] top-1/2 -translate-y-1/2',
+  2: 'top-[8%] left-1/2 -translate-x-1/2',
+  3: 'right-[8%] top-1/2 -translate-y-1/2',
 };
 
-export function TrickArea({ currentTrick, mySeat, numPlayers }: TrickAreaProps) {
+export function TrickArea({ currentTrick, mySeat, numPlayers, scale = 1 }: TrickAreaProps) {
   return (
-    <div className="relative w-44 h-44 shrink-0">
+    <div className="relative shrink-0" style={{ width: 176 * scale, height: 176 * scale }}>
       {currentTrick.map(({ seatIndex, card }) => {
         const relative = (seatIndex - mySeat + numPlayers) % numPlayers;
         return (
@@ -26,7 +27,7 @@ export function TrickArea({ currentTrick, mySeat, numPlayers }: TrickAreaProps) 
             key={`${card.suit}${card.rank}`}
             className={`absolute ${POSITIONS[relative] ?? ''} transition-all duration-300 ease-out animate-card-play`}
           >
-            <PlayingCard card={card} small disabled />
+            <PlayingCard card={card} small disabled scale={scale} />
           </div>
         );
       })}

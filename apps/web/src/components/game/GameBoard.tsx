@@ -3,6 +3,7 @@
 import { useEffect, useCallback, useState, useRef } from 'react';
 import { GamePhase, GameType, type Card } from '@card-game/shared-types';
 import { useSocket } from '@/hooks/useSocket';
+import { useScale } from '@/hooks/useScale';
 import { useGameStore, useSettingsStore } from '@card-game/shared-store';
 import { PlayingCard } from './PlayingCard';
 import { PlayerSeat } from './PlayerSeat';
@@ -19,6 +20,7 @@ export function GameBoard() {
     setGameState, setGameOver, toggleCardSelection, clearSelectedCards, setError,
   } = useGameStore();
   const { tableColor } = useSettingsStore();
+  const { ref: tableRef, scale } = useScale(900);
 
   useEffect(() => {
     socket.on('game:state', (state) => setGameState(state));
@@ -233,47 +235,50 @@ export function GameBoard() {
 
         {/* Game table — seamless surface */}
         <div
+          ref={tableRef}
           className="relative rounded-xl overflow-hidden flex-1"
           style={{
             background: tableColor.gradient,
             border: `1px solid ${tableColor.border}`,
             boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04), 0 2px 12px rgba(0,0,0,0.5)',
+            ['--game-scale' as string]: scale,
+            fontSize: `${scale * 13}px`,
           }}
         >
-          <div className="relative flex flex-col h-full p-4">
+          <div className="relative flex flex-col h-full" style={{ padding: `${scale * 16}px` }}>
 
             {/* Top player */}
             <div className="flex justify-center">
               {topPlayer && (
-                <PlayerSeat player={topPlayer} isCurrentTurn={gameState.currentPlayerSeat === topPlayer.seatIndex} position="top" />
+                <PlayerSeat player={topPlayer} isCurrentTurn={gameState.currentPlayerSeat === topPlayer.seatIndex} position="top" scale={scale} />
               )}
             </div>
 
             {/* Middle: left — trick — right */}
-            <div className="flex-1 flex items-center justify-between gap-3 my-3">
-              <div className="w-[220px] shrink-0 flex justify-start">
+            <div className="flex-1 flex items-center justify-between my-3" style={{ gap: 12 * scale }}>
+              <div className="shrink-0 flex justify-start" style={{ width: 220 * scale }}>
                 {leftPlayer && (
-                  <PlayerSeat player={leftPlayer} isCurrentTurn={gameState.currentPlayerSeat === leftPlayer.seatIndex} position="left" />
+                  <PlayerSeat player={leftPlayer} isCurrentTurn={gameState.currentPlayerSeat === leftPlayer.seatIndex} position="left" scale={scale} />
                 )}
               </div>
 
-              <TrickArea currentTrick={gameState.currentTrick} mySeat={gameState.mySeat} numPlayers={gameState.players.length} />
+              <TrickArea currentTrick={gameState.currentTrick} mySeat={gameState.mySeat} numPlayers={gameState.players.length} scale={scale} />
 
-              <div className="w-[220px] shrink-0 flex justify-end">
+              <div className="shrink-0 flex justify-end" style={{ width: 220 * scale }}>
                 {rightPlayer && (
-                  <PlayerSeat player={rightPlayer} isCurrentTurn={gameState.currentPlayerSeat === rightPlayer.seatIndex} position="right" />
+                  <PlayerSeat player={rightPlayer} isCurrentTurn={gameState.currentPlayerSeat === rightPlayer.seatIndex} position="right" scale={scale} />
                 )}
               </div>
             </div>
 
             {/* Bottom: my info + hand */}
             <div>
-              <div className="flex justify-center mb-2">
-                <PlayerSeat player={myPlayer} isCurrentTurn={gameState.currentPlayerSeat === gameState.mySeat} position="bottom" isMe />
+              <div className="flex justify-center" style={{ marginBottom: 8 * scale }}>
+                <PlayerSeat player={myPlayer} isCurrentTurn={gameState.currentPlayerSeat === gameState.mySeat} position="bottom" isMe scale={scale} />
               </div>
 
               <div className="flex justify-center">
-                <div className="flex" style={{ gap: '3px' }}>
+                <div className="flex" style={{ gap: 3 * scale }}>
                   {gameState.myHand.map((card) => {
                     const legal = isCardLegal(card);
                     const isSelected = selectedCards.some((c) => c.suit === card.suit && c.rank === card.rank);
@@ -281,6 +286,7 @@ export function GameBoard() {
                       <PlayingCard
                         key={`${card.suit}${card.rank}`}
                         card={card}
+                        scale={scale}
                         selected={isSelected}
                         disabled={isPassing ? false : !isMyTurn || !legal}
                         onClick={() => {
