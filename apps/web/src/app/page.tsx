@@ -73,7 +73,7 @@ export default function LobbyPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [matchmaking, setMatchmaking] = useState(false);
   const [queuePosition, setQueuePosition] = useState<number | null>(null);
-  const [playMode, setPlayMode] = useState<'ai' | 'online'>('ai');
+  const [playMode, setPlayMode] = useState<'ai' | 'online'>('online');
   const [gameSearch, setGameSearch] = useState('');
   const [gameDropdownOpen, setGameDropdownOpen] = useState(false);
   const [joinCode, setJoinCode] = useState('');
@@ -360,7 +360,7 @@ export default function LobbyPage() {
                     : 'text-[var(--text-secondary)] hover:text-white'
                 }`}
               >
-                Online
+                With Friends
               </button>
             </div>
           </div>
