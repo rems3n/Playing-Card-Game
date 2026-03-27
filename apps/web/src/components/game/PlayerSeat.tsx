@@ -31,47 +31,36 @@ function getBotFace(name: string): string {
   return BOT_FACES[name] ?? '🤖';
 }
 
-function FannedCards({ count, scale, position }: { count: number; scale: number; position: string }) {
+function OpponentHand({ count, scale }: { count: number; scale: number }) {
   const { cardBack } = useSettingsStore();
-  const shown = Math.min(count, 7);
-  if (shown === 0) return null;
+  if (count === 0) return null;
 
-  // Fan angle: spread cards slightly
-  const totalSpread = Math.min(shown * 6, 40); // degrees
-  const startAngle = -totalSpread / 2;
-
-  const isVertical = position === 'top' || position === 'bottom';
+  // Each card overlaps the previous one — show all cards, overlap by ~70%
+  const cardW = 56 * scale;
+  const overlap = cardW * 0.72;
+  const totalWidth = cardW + (count - 1) * (cardW - overlap);
 
   return (
     <div
-      className="relative flex items-end justify-center"
+      className="flex"
       style={{
-        height: isVertical ? 30 * scale : 35 * scale,
-        width: isVertical ? shown * 12 * scale + 30 * scale : 40 * scale,
-        marginTop: isVertical ? 4 * scale : 0,
-        marginLeft: !isVertical ? 4 * scale : 0,
+        width: totalWidth,
+        height: 80 * scale,
+        marginTop: 4 * scale,
       }}
     >
-      {Array.from({ length: shown }).map((_, i) => {
-        const angle = startAngle + (i / Math.max(shown - 1, 1)) * totalSpread;
-        const offsetX = isVertical ? (i - shown / 2) * 8 * scale : 0;
-        const offsetY = !isVertical ? (i - shown / 2) * 6 * scale : 0;
-
-        return (
-          <div
-            key={i}
-            className="absolute"
-            style={{
-              transform: `translate(${offsetX}px, ${offsetY}px) rotate(${isVertical ? angle : angle * 0.5}deg)`,
-              left: isVertical ? '50%' : undefined,
-              top: !isVertical ? '50%' : undefined,
-              zIndex: i,
-            }}
-          >
-            <CardBack small scale={scale * 0.55} design={cardBack} />
-          </div>
-        );
-      })}
+      {Array.from({ length: count }).map((_, i) => (
+        <div
+          key={i}
+          style={{
+            marginLeft: i > 0 ? -overlap : 0,
+            zIndex: i,
+            position: 'relative',
+          }}
+        >
+          <CardBack scale={scale} design={cardBack} />
+        </div>
+      ))}
     </div>
   );
 }
@@ -136,9 +125,9 @@ export function PlayerSeat({ player, isCurrentTurn, position, isMe, scale = 1 }:
         )}
       </div>
 
-      {/* Fanned face-down cards */}
+      {/* Face-down cards */}
       {showCards && (
-        <FannedCards count={player.cardCount} scale={s} position={position} />
+        <OpponentHand count={player.cardCount} scale={s} />
       )}
     </div>
   );
