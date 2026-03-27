@@ -36,6 +36,24 @@ const GAME_OPTIONS = [
     players: '4 players (2v2)',
     available: true,
   },
+  {
+    type: 'rummy' as GameType,
+    name: 'Rummy',
+    icon: '🂡',
+    color: 'text-green-400',
+    description: 'Form sets and runs to be the first to go out. Classic meld-building game.',
+    players: '2-4 players',
+    available: false,
+  },
+  {
+    type: 'poker' as GameType,
+    name: 'Poker',
+    icon: '🎰',
+    color: 'text-amber-400',
+    description: 'Texas Hold\'em. Bet, bluff, and build the best 5-card hand.',
+    players: '2-8 players',
+    available: false,
+  },
 ];
 
 const DIFFICULTY_OPTIONS = [
@@ -273,20 +291,49 @@ export default function LobbyPage() {
               )}
             </div>
 
-            {/* Selected game display */}
-            {(() => {
-              const selected = GAME_OPTIONS.find((g) => g.type === selectedGame);
-              if (!selected) return null;
+            {/* Game list — always visible, filtered by search */}
+            {!gameDropdownOpen && (() => {
+              const filtered = GAME_OPTIONS.filter((g) =>
+                g.name.toLowerCase().includes(gameSearch.toLowerCase()) ||
+                g.description.toLowerCase().includes(gameSearch.toLowerCase())
+              );
               return (
-                <div className="flex items-center gap-3 px-4 py-3 rounded-lg border-2 border-[var(--accent-gold)] bg-[var(--accent-gold)]/10">
-                  <span className={`text-2xl shrink-0 ${selected.color}`}>{selected.icon}</span>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold">{selected.name}</span>
-                      <span className="text-[10px] text-[var(--text-muted)]">{selected.players}</span>
-                    </div>
-                    <p className="text-xs text-[var(--text-secondary)] mt-0.5">{selected.description}</p>
-                  </div>
+                <div className="flex flex-col gap-1.5">
+                  {filtered.map((game) => (
+                    <button
+                      key={game.type}
+                      onClick={() => game.available && setSelectedGame(game.type)}
+                      disabled={!game.available}
+                      className={`
+                        flex items-center gap-3 text-left px-4 py-2.5 rounded-lg border-2 transition-all
+                        ${selectedGame === game.type
+                          ? 'border-[var(--accent-gold)] bg-[var(--accent-gold)]/10'
+                          : 'border-[var(--border-subtle)] bg-[var(--bg-secondary)] hover:border-white/20'
+                        }
+                        ${!game.available ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+                      `}
+                    >
+                      <span className={`text-xl shrink-0 ${game.color}`}>{game.icon}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold">{game.name}</span>
+                          <span className="text-[10px] text-[var(--text-muted)]">{game.players}</span>
+                          {selectedGame === game.type && (
+                            <svg className="w-4 h-4 text-[var(--accent-gold)] shrink-0 ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                          {!game.available && (
+                            <span className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded-full ml-auto">Soon</span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-[var(--text-secondary)] mt-0.5">{game.description}</p>
+                      </div>
+                    </button>
+                  ))}
+                  {filtered.length === 0 && (
+                    <div className="text-sm text-[var(--text-muted)] text-center py-3">No games found</div>
+                  )}
                 </div>
               );
             })()}
