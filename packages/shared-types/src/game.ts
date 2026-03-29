@@ -34,6 +34,8 @@ export enum GameType {
   Hearts = 'hearts',
   Spades = 'spades',
   Euchre = 'euchre',
+  Rummy = 'rummy',
+  SevenSix = 'seven-six',
 }
 
 export enum GamePhase {
@@ -114,6 +116,16 @@ export interface GameState {
   roundScores: number[]; // current round scores per seat
   trumpSuit?: Suit;
   bids?: (number | null)[]; // per seat, null = hasn't bid yet
+  // Rummy-specific
+  drawPile?: Card[];
+  discardPile?: Card[];
+  melds?: Card[][][]; // [seat][meldIndex][cards]
+  rummyPhase?: 'draw' | 'discard';
+  // Seven-Six-specific
+  trumpCard?: Card; // face-up card that determines trump
+  dealerSeat?: number; // who is dealing this round
+  handSize?: number; // cards per player this round
+  totalRounds?: number; // total rounds in the game
 }
 
 /** What a specific player can see (hides opponents' hands) */
@@ -137,6 +149,16 @@ export interface VisibleGameState {
   myHand: Card[];
   mySeat: number;
   legalMoves: Card[];
+  // Rummy-specific (visible to all)
+  drawPileCount?: number;
+  discardTop?: Card | null;
+  melds?: Card[][][]; // all players' melds
+  rummyPhase?: 'draw' | 'discard';
+  // Seven-Six-specific (visible to all)
+  trumpCard?: Card;
+  dealerSeat?: number;
+  handSize?: number;
+  totalRounds?: number;
 }
 
 export interface VisiblePlayerState {

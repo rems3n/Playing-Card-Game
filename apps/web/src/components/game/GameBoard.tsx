@@ -12,6 +12,7 @@ import { ScoreBoard } from './ScoreBoard';
 import { ChatPanel } from './ChatPanel';
 import { BiddingPanel } from './BiddingPanel';
 import { RulesModal } from '../RulesModal';
+import { RummyBoard } from './RummyBoard';
 
 export function GameBoard() {
   const socket = useSocket();
@@ -21,6 +22,11 @@ export function GameBoard() {
   } = useGameStore();
   const { tableColor } = useSettingsStore();
   const { ref: tableRef, scale } = useScale(900);
+
+  // Rummy has its own board component
+  if (gameState?.gameType === GameType.Rummy) {
+    return <RummyBoard />;
+  }
 
   useEffect(() => {
     socket.on('game:state', (state) => setGameState(state));
@@ -219,8 +225,9 @@ export function GameBoard() {
             <span className="w-px h-3 bg-[var(--border-subtle)]" />
             <span className="capitalize">{gameState.gameType}</span>
             <span className="w-px h-3 bg-[var(--border-subtle)]" />
-            <span>R{gameState.roundNumber + 1}</span>
+            <span>R{gameState.roundNumber + 1}{gameState.totalRounds ? `/${gameState.totalRounds}` : ''}</span>
             {!isBidding && <span>T{gameState.trickNumber + 1}</span>}
+            {gameState.handSize && <span>{gameState.handSize} card{gameState.handSize !== 1 ? 's' : ''}</span>}
             {gameState.gameType === GameType.Hearts && gameState.heartsBroken && (
               <span className="text-[var(--accent-red)]">{'\u2665'} broken</span>
             )}
@@ -332,10 +339,17 @@ export function GameBoard() {
               <span>Game</span>
               <span className="text-[var(--text-primary)] capitalize">{gameState.gameType}</span>
             </div>
-            <div className="flex justify-between">
-              <span>Target</span>
-              <span className="text-[var(--text-primary)]">{gameState.config.targetScore}</span>
-            </div>
+            {gameState.gameType === GameType.SevenSix ? (
+              <div className="flex justify-between">
+                <span>Rounds</span>
+                <span className="text-[var(--text-primary)]">{gameState.totalRounds}</span>
+              </div>
+            ) : (
+              <div className="flex justify-between">
+                <span>Target</span>
+                <span className="text-[var(--text-primary)]">{gameState.config.targetScore}</span>
+              </div>
+            )}
             {gameState.passDirection && (
               <div className="flex justify-between">
                 <span>Pass</span>
@@ -349,7 +363,7 @@ export function GameBoard() {
       </div>
 
       <RulesModal
-        gameType={gameState.gameType as 'hearts' | 'spades' | 'euchre'}
+        gameType={gameState.gameType as 'hearts' | 'spades' | 'euchre' | 'rummy' | 'seven-six'}
         open={rulesOpen}
         onClose={() => setRulesOpen(false)}
       />

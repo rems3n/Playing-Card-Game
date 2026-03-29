@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { AIDifficulty, GameType } from '@card-game/shared-types';
+import { AIDifficulty, GameType, type GameConfig } from '@card-game/shared-types';
 import { useSocket } from '@/hooks/useSocket';
 import { useGameStore } from '@card-game/shared-store';
 import { FriendsList } from '@/components/lobby/FriendsList';
@@ -37,13 +37,22 @@ const GAME_OPTIONS = [
     available: true,
   },
   {
-    type: 'rummy' as GameType,
+    type: GameType.Rummy,
     name: 'Rummy',
     icon: '🂡',
     color: 'text-green-400',
     description: 'Form sets and runs to be the first to go out. Classic meld-building game.',
-    players: '2-4 players',
-    available: false,
+    players: '2-6 players',
+    available: true,
+  },
+  {
+    type: GameType.SevenSix,
+    name: 'Seven-Six',
+    icon: '7',
+    color: 'text-purple-400',
+    description: 'Bid exactly how many tricks you\'ll win. Hands shrink then grow — every round counts!',
+    players: '2-7 players',
+    available: true,
   },
   {
     type: 'poker' as GameType,
@@ -55,6 +64,22 @@ const GAME_OPTIONS = [
     available: false,
   },
 ];
+
+const DEFAULT_TARGET_SCORES: Record<GameType, number> = {
+  [GameType.Hearts]: 100,
+  [GameType.Spades]: 500,
+  [GameType.Euchre]: 10,
+  [GameType.Rummy]: 100,
+  [GameType.SevenSix]: 0, // not used — fixed round count
+};
+
+const TARGET_SCORE_LABELS: Record<GameType, { label: string; description: string; min: number; max: number; step: number }> = {
+  [GameType.Hearts]: { label: 'Points to Lose', description: 'Game ends when a player reaches this score', min: 25, max: 500, step: 25 },
+  [GameType.Spades]: { label: 'Points to Win', description: 'First team to reach this score wins', min: 100, max: 1000, step: 50 },
+  [GameType.Euchre]: { label: 'Points to Win', description: 'First team to reach this score wins', min: 5, max: 20, step: 1 },
+  [GameType.Rummy]: { label: 'Points to Lose', description: 'Game ends when a player reaches this score', min: 50, max: 500, step: 25 },
+  [GameType.SevenSix]: { label: 'Rounds', description: 'Fixed number of rounds based on player count', min: 0, max: 0, step: 1 },
+};
 
 const DIFFICULTY_OPTIONS = [
   { value: AIDifficulty.Beginner, label: 'Beginner', emoji: '😊', desc: 'Random play' },
@@ -69,6 +94,8 @@ export default function LobbyPage() {
   const { data: session } = useSession();
   const { setGameId } = useGameStore();
   const [selectedGame, setSelectedGame] = useState<GameType>(GameType.Hearts);
+  const [targetScore, setTargetScore] = useState<number>(DEFAULT_TARGET_SCORES[GameType.Hearts]);
+  const [playerCount, setPlayerCount] = useState<number>(4);
   const [difficulty, setDifficulty] = useState<AIDifficulty>(AIDifficulty.Beginner);
   const [isCreating, setIsCreating] = useState(false);
   const [matchmaking, setMatchmaking] = useState(false);
@@ -155,8 +182,19 @@ export default function LobbyPage() {
     return () => clearInterval(interval);
   }, [matchProposal, proposalTimer]);
 
+  const getConfig = (): Partial<GameConfig> | undefined => {
+    const config: Partial<GameConfig> = {};
+    if (targetScore !== DEFAULT_TARGET_SCORES[selectedGame]) {
+      config.targetScore = targetScore;
+    }
+    if ((selectedGame === GameType.Rummy || selectedGame === GameType.SevenSix) && playerCount !== 4) {
+      config.maxPlayers = playerCount;
+    }
+    return Object.keys(config).length > 0 ? config : undefined;
+  };
+
   const handleCreateRoom = () => {
-    socket.emit('room:create', { gameType: selectedGame });
+    socket.emit('room:create', { gameType: selectedGame, config: getConfig() });
   };
 
   const handlePlayAI = () => {
@@ -174,6 +212,7 @@ export default function LobbyPage() {
 
     socket.emit('lobby:create_game', {
       gameType: selectedGame,
+      config: getConfig(),
       aiDifficulty: difficulty,
       fillWithAI: true,
     });
@@ -182,7 +221,7 @@ export default function LobbyPage() {
   const handleMatchmaking = () => {
     setMatchmaking(true);
     setQueuePosition(null);
-    socket.emit('matchmaking:join', { gameType: selectedGame });
+    socket.emit('matchmaking:join', { gameType: selectedGame, config: getConfig() });
   };
 
   const handleCancelMatchmaking = () => {
@@ -250,6 +289,7 @@ export default function LobbyPage() {
                         onClick={() => {
                           if (game.available) {
                             setSelectedGame(game.type);
+                            setTargetScore(DEFAULT_TARGET_SCORES[game.type]);
                             setGameDropdownOpen(false);
                             setGameSearch('');
                           }
@@ -302,7 +342,7 @@ export default function LobbyPage() {
                   {filtered.map((game) => (
                     <button
                       key={game.type}
-                      onClick={() => game.available && setSelectedGame(game.type)}
+                      onClick={() => { if (game.available) { setSelectedGame(game.type); setTargetScore(DEFAULT_TARGET_SCORES[game.type]); } }}
                       disabled={!game.available}
                       className={`
                         flex items-center gap-3 text-left px-4 py-2.5 rounded-lg border-2 transition-all
@@ -364,6 +404,85 @@ export default function LobbyPage() {
                 vs AI
               </button>
             </div>
+          </div>
+
+          {/* Game Settings */}
+          <div className="mb-6">
+            <h2 className="text-sm font-semibold mb-3 text-[var(--text-secondary)]">Game Settings</h2>
+            {selectedGame === GameType.SevenSix ? (
+              <div className="bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-lg px-4 py-3">
+                <p className="text-sm font-medium">Fixed Rounds</p>
+                <p className="text-[11px] text-[var(--text-muted)]">
+                  Hand sizes go down then back up (e.g. 7, 6, 5, ..., 1, ..., 5, 6, 7). Number of rounds depends on player count.
+                </p>
+              </div>
+            ) : (() => {
+              const info = TARGET_SCORE_LABELS[selectedGame];
+              const defaultVal = DEFAULT_TARGET_SCORES[selectedGame];
+              const isCustom = targetScore !== defaultVal;
+              return (
+                <div className="bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-lg px-4 py-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-sm font-medium">{info.label}</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        value={targetScore}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10);
+                          if (!isNaN(val) && val >= info.min && val <= info.max) {
+                            setTargetScore(val);
+                          }
+                        }}
+                        min={info.min}
+                        max={info.max}
+                        step={info.step}
+                        className="w-20 bg-[var(--bg-primary)] border border-[var(--border-subtle)] rounded px-2 py-1 text-sm text-center font-mono focus:outline-none focus:border-[var(--accent-blue)]/50"
+                      />
+                      {isCustom && (
+                        <button
+                          onClick={() => setTargetScore(defaultVal)}
+                          className="text-[11px] text-[var(--text-muted)] hover:text-white transition-colors"
+                          title="Reset to default"
+                        >
+                          Reset
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-[var(--text-muted)]">
+                    {info.description} (default: {defaultVal})
+                  </p>
+                </div>
+              );
+            })()}
+
+            {/* Player count (Rummy & Seven-Six) */}
+            {(selectedGame === GameType.Rummy || selectedGame === GameType.SevenSix) && (
+              <div className="bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-lg px-4 py-3 mt-2">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-sm font-medium">Players</label>
+                  <div className="flex gap-1">
+                    {(selectedGame === GameType.SevenSix ? [2, 3, 4, 5, 6, 7] : [2, 3, 4, 5, 6]).map((n) => (
+                      <button
+                        key={n}
+                        onClick={() => setPlayerCount(n)}
+                        className={`w-8 h-8 rounded text-sm font-bold transition-all ${
+                          playerCount === n
+                            ? 'bg-[var(--accent-green)] text-white'
+                            : 'bg-[var(--bg-primary)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-white/20'
+                        }`}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <p className="text-[11px] text-[var(--text-muted)]">
+                  {playMode === 'ai' ? 'AI fills remaining seats' : 'AI fills empty seats when game starts'}
+                </p>
+              </div>
+            )}
           </div>
 
           {/* AI Difficulty (only shown for AI mode) */}

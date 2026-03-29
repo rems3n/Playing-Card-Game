@@ -65,6 +65,89 @@ export function BiddingPanel({ gameState, onBid, onCallTrump }: BiddingPanelProp
     );
   }
 
+  if (gameState.gameType === GameType.SevenSix) {
+    const handSize = gameState.handSize ?? gameState.myHand.length;
+    // Calculate restricted bid for dealer
+    const bids = gameState.bids ?? [];
+    const isDealer = gameState.dealerSeat === gameState.mySeat;
+    const currentTotal = bids.filter((b): b is number => b !== null).reduce((s, b) => s + b, 0);
+    const restrictedBid = isDealer ? handSize - currentTotal : -1;
+
+    // Clamp selectedBid to valid range
+    const validBid = Math.min(selectedBid, handSize);
+
+    return (
+      <div className="bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-subtle)] p-4 text-center">
+        <div className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-1">Bidding</div>
+        <div className="text-[10px] text-[var(--text-muted)] mb-3">
+          Round {(gameState.roundNumber ?? 0) + 1}/{gameState.totalRounds ?? '?'} — {handSize} card{handSize !== 1 ? 's' : ''}
+          {gameState.trumpSuit && (
+            <span className="ml-1 text-[var(--accent-gold)]">
+              Trump: {{ H: '\u2665', D: '\u2666', C: '\u2663', S: '\u2660' }[gameState.trumpSuit]}
+            </span>
+          )}
+        </div>
+
+        {/* Bids so far */}
+        <div className="flex justify-center gap-4 mb-4 flex-wrap">
+          {gameState.players.map((p) => (
+            <div key={p.seatIndex} className="text-center min-w-0">
+              <div className="text-[11px] text-[var(--text-muted)] truncate max-w-[80px]">
+                {p.displayName}
+                {p.seatIndex === gameState.dealerSeat && <span className="ml-0.5 text-[var(--accent-gold)]">D</span>}
+              </div>
+              <div className="text-lg font-bold mt-0.5">
+                {bids[p.seatIndex] != null ? bids[p.seatIndex] : '\u2014'}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {isMyTurn ? (
+          <div>
+            <p className="text-[12px] text-[var(--accent-green)] font-semibold mb-2">
+              Your bid{isDealer ? ' (dealer — total cannot equal hand size)' : ''}
+            </p>
+            <div className="flex items-center justify-center gap-2 mb-3">
+              <button
+                onClick={() => setSelectedBid(Math.max(0, validBid - 1))}
+                className="w-7 h-7 rounded bg-[var(--bg-tertiary)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] flex items-center justify-center text-sm"
+              >-</button>
+              <span className="text-xl font-bold w-8 text-center tabular-nums">{validBid}</span>
+              <button
+                onClick={() => setSelectedBid(Math.min(handSize, validBid + 1))}
+                className="w-7 h-7 rounded bg-[var(--bg-tertiary)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] flex items-center justify-center text-sm"
+              >+</button>
+            </div>
+            <div className="flex justify-center gap-2 flex-wrap">
+              {Array.from({ length: handSize + 1 }, (_, i) => i).map((b) => {
+                const disabled = b === restrictedBid;
+                return (
+                  <button
+                    key={b}
+                    onClick={() => !disabled && onBid(b)}
+                    disabled={disabled}
+                    className={`w-8 h-8 rounded text-[12px] font-bold transition-all ${
+                      disabled
+                        ? 'opacity-30 cursor-not-allowed bg-[var(--bg-tertiary)] border border-[var(--border-subtle)]'
+                        : 'bg-[var(--bg-tertiary)] border border-[var(--border-subtle)] hover:border-[var(--accent-gold)] hover:bg-[var(--accent-gold)]/8'
+                    }`}
+                  >
+                    {b}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <p className="text-[12px] text-[var(--text-muted)]">
+            Waiting for {gameState.players[gameState.currentPlayerSeat]?.displayName}
+          </p>
+        )}
+      </div>
+    );
+  }
+
   if (gameState.gameType === GameType.Euchre) {
     const suits = [
       { suit: 'H', symbol: '\u2665', color: 'text-[#c33]' },

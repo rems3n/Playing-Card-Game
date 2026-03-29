@@ -8,16 +8,19 @@ import {
   GameType,
   Suit,
 } from '@card-game/shared-types';
-import { HeartsEngine, SpadesEngine, EuchreEngine } from '@card-game/game-engine';
+import { HeartsEngine, SpadesEngine, EuchreEngine, RummyEngine, SevenSixEngine } from '@card-game/game-engine';
 import {
   createAIPlayer,
   type AIPlayer,
   shouldCallTrump,
   chooseTrumpSuit,
+  findMelds,
+  chooseDrawSource,
+  sevenSixBid,
 } from '@card-game/ai';
 import { GameStateStore, type SerializedGame } from './GameStateStore.js';
 
-type AnyEngine = HeartsEngine | SpadesEngine | EuchreEngine;
+type AnyEngine = HeartsEngine | SpadesEngine | EuchreEngine | RummyEngine | SevenSixEngine;
 
 export interface GameRoom {
   engine: AnyEngine;
@@ -88,6 +91,12 @@ export class GameService {
       case GameType.Euchre:
         engine = new EuchreEngine(data.gameId);
         break;
+      case GameType.Rummy:
+        engine = new RummyEngine(data.gameId);
+        break;
+      case GameType.SevenSix:
+        engine = new SevenSixEngine(data.gameId);
+        break;
       default:
         throw new Error(`Unknown game type: ${data.gameType}`);
     }
@@ -136,6 +145,12 @@ export class GameService {
         break;
       case GameType.Euchre:
         engine = new EuchreEngine(gameId, config);
+        break;
+      case GameType.Rummy:
+        engine = new RummyEngine(gameId, config);
+        break;
+      case GameType.SevenSix:
+        engine = new SevenSixEngine(gameId, config);
         break;
       default:
         throw new Error(`Unknown game type: ${gameType}`);
@@ -191,8 +206,9 @@ export class GameService {
     }
 
     // Find first seat not occupied by a human
+    const maxSeats = room.engine.getState().config.maxPlayers;
     let seat = -1;
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < maxSeats; i++) {
       if (!room.playerSockets.has(i)) {
         seat = i;
         break;
@@ -212,10 +228,11 @@ export class GameService {
     const room = await this.ensureLoaded(gameId);
     if (!room) throw new Error('Game not found');
 
-    const botNames = ['Dealer Danny', 'Lucky Lucy', 'Card Shark Sally', 'Steady Steve'];
+    const botNames = ['Dealer Danny', 'Lucky Lucy', 'Card Shark Sally', 'Steady Steve', 'Professor Pip', 'The Oracle'];
     let botIdx = 0;
+    const maxSeats = room.engine.getState().config.maxPlayers;
 
-    for (let seat = 0; seat < 4; seat++) {
+    for (let seat = 0; seat < maxSeats; seat++) {
       if (!room.playerSockets.has(seat)) {
         const name = botNames[botIdx++ % botNames.length];
         const ai = createAIPlayer(difficulty, name);
@@ -253,6 +270,38 @@ export class GameService {
     const room = await this.ensureLoaded(gameId);
     if (!room) throw new Error('Game not found');
     if (!(room.engine instanceof SpadesEngine)) throw new Error('Not a Spades game');
+    room.engine.placeBid(seatIndex, bid);
+    await this.persist(gameId);
+  }
+
+  async rummyDraw(gameId: string, seatIndex: number, source: 'stock' | 'discard'): Promise<void> {
+    const room = await this.ensureLoaded(gameId);
+    if (!room) throw new Error('Game not found');
+    if (!(room.engine instanceof RummyEngine)) throw new Error('Not a Rummy game');
+    room.engine.drawCard(seatIndex, source);
+    await this.persist(gameId);
+  }
+
+  async rummyLayMeld(gameId: string, seatIndex: number, cards: Card[]): Promise<void> {
+    const room = await this.ensureLoaded(gameId);
+    if (!room) throw new Error('Game not found');
+    if (!(room.engine instanceof RummyEngine)) throw new Error('Not a Rummy game');
+    room.engine.layMeld(seatIndex, cards);
+    await this.persist(gameId);
+  }
+
+  async rummyDiscard(gameId: string, seatIndex: number, card: Card): Promise<void> {
+    const room = await this.ensureLoaded(gameId);
+    if (!room) throw new Error('Game not found');
+    if (!(room.engine instanceof RummyEngine)) throw new Error('Not a Rummy game');
+    room.engine.discardCard(seatIndex, card);
+    await this.persist(gameId);
+  }
+
+  async sevenSixPlaceBid(gameId: string, seatIndex: number, bid: number): Promise<void> {
+    const room = await this.ensureLoaded(gameId);
+    if (!room) throw new Error('Game not found');
+    if (!(room.engine instanceof SevenSixEngine)) throw new Error('Not a Seven-Six game');
     room.engine.placeBid(seatIndex, bid);
     await this.persist(gameId);
   }
@@ -373,6 +422,29 @@ export class GameService {
       return;
     }
 
+    // ── Seven-Six: AI bidding ──
+    if (state.phase === GamePhase.Bidding && room.engine instanceof SevenSixEngine) {
+      let currentSeat = state.currentPlayerSeat;
+      let ai = room.aiPlayers.get(currentSeat);
+
+      while (ai && room.engine.getState().phase === GamePhase.Bidding) {
+        const ssEngine = room.engine as SevenSixEngine;
+        const hand = ssEngine.getState().players[currentSeat].hand;
+        const trumpSuit = ssEngine.getState().trumpSuit!;
+        const legalBids = ssEngine.getLegalBids(currentSeat);
+        const bid = sevenSixBid(hand, trumpSuit, legalBids);
+        await this.delay(500);
+        ssEngine.placeBid(currentSeat, bid);
+
+        const newState = ssEngine.getState();
+        if (newState.phase !== GamePhase.Bidding) break;
+        currentSeat = newState.currentPlayerSeat;
+        ai = room.aiPlayers.get(currentSeat);
+      }
+      await this.persist(gameId);
+      return;
+    }
+
     // ── Euchre: AI trump calling ──
     if (state.phase === GamePhase.Bidding && room.engine instanceof EuchreEngine) {
       let currentSeat = state.currentPlayerSeat;
@@ -404,6 +476,59 @@ export class GameService {
         ai = room.aiPlayers.get(currentSeat);
       }
       await this.persist(gameId);
+      return;
+    }
+
+    // ── Rummy: AI draw/meld/discard ──
+    if (state.phase === GamePhase.Playing && room.engine instanceof RummyEngine) {
+      let currentSeat = state.currentPlayerSeat;
+      let ai = room.aiPlayers.get(currentSeat);
+
+      while (ai && room.engine.getState().phase === GamePhase.Playing) {
+        const rummyEngine = room.engine as RummyEngine;
+        const visibleState = rummyEngine.getVisibleState(currentSeat);
+
+        // Draw
+        if (rummyEngine.getRummyPhase() === 'draw') {
+          const source = chooseDrawSource(visibleState);
+          await this.delay(800);
+          rummyEngine.drawCard(currentSeat, source);
+          await this.persist(gameId);
+        }
+
+        // Check if round ended (shouldn't happen after draw, but just in case)
+        if (rummyEngine.getState().phase !== GamePhase.Playing) break;
+
+        // Lay melds
+        const hand = rummyEngine.getState().players[currentSeat].hand;
+        const melds = findMelds(hand);
+        for (const meld of melds) {
+          try {
+            await this.delay(500);
+            rummyEngine.layMeld(currentSeat, meld);
+            await this.persist(gameId);
+            if (rummyEngine.getState().phase !== GamePhase.Playing) break;
+          } catch {
+            // Meld may fail if cards overlap between melds — skip
+          }
+        }
+
+        if (rummyEngine.getState().phase !== GamePhase.Playing) break;
+
+        // Discard (if hand is not empty — could be empty if last meld cleared it)
+        if (rummyEngine.getState().players[currentSeat].hand.length > 0) {
+          const updatedState = rummyEngine.getVisibleState(currentSeat);
+          const discard = ai.chooseCard(updatedState);
+          await this.delay(1000);
+          rummyEngine.discardCard(currentSeat, discard);
+          await this.persist(gameId);
+        }
+
+        if (rummyEngine.getState().phase !== GamePhase.Playing) break;
+
+        currentSeat = rummyEngine.getState().currentPlayerSeat;
+        ai = room.aiPlayers.get(currentSeat);
+      }
       return;
     }
 

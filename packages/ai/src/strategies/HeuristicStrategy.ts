@@ -3,6 +3,8 @@ import { AIDifficulty, Suit, Rank, GameType } from '@card-game/shared-types';
 import type { AIPlayer } from '../AIPlayer.js';
 import { spadesPlayCard, spadesBid } from '../games/SpadesAI.js';
 import { euchrePlayCard, shouldCallTrump, chooseTrumpSuit } from '../games/EuchreAI.js';
+import { chooseDiscard as rummyChooseDiscard } from '../games/RummyAI.js';
+import { sevenSixPlayCard, sevenSixBid } from '../games/SevenSixAI.js';
 
 export class HeuristicStrategy implements AIPlayer {
   readonly difficulty = AIDifficulty.Intermediate;
@@ -23,6 +25,10 @@ export class HeuristicStrategy implements AIPlayer {
         return spadesPlayCard(state, moves);
       case GameType.Euchre:
         return euchrePlayCard(state, moves);
+      case GameType.Rummy:
+        return rummyChooseDiscard(state);
+      case GameType.SevenSix:
+        return sevenSixPlayCard(state, moves);
       default:
         return moves.reduce((lowest, card) =>
           card.rank < lowest.rank ? card : lowest,
@@ -102,6 +108,19 @@ export class HeuristicStrategy implements AIPlayer {
   chooseBid(state: VisibleGameState): number | 'pass' {
     if (state.gameType === GameType.Spades) {
       return spadesBid(state.myHand);
+    }
+    if (state.gameType === GameType.SevenSix && state.trumpSuit) {
+      // Build legal bids list from state
+      const handSize = state.myHand.length;
+      const bids = state.bids ?? [];
+      const isDealer = state.dealerSeat === state.mySeat;
+      const legalBids: number[] = [];
+      const currentTotal = bids.filter((b): b is number => b !== null).reduce((s, b) => s + b, 0);
+      for (let b = 0; b <= handSize; b++) {
+        if (isDealer && currentTotal + b === handSize) continue;
+        legalBids.push(b);
+      }
+      return sevenSixBid(state.myHand, state.trumpSuit, legalBids);
     }
     // Euchre bidding is handled via callTrump, not this method
     return Math.max(1, Math.min(Math.floor(state.myHand.length / 3), 5));

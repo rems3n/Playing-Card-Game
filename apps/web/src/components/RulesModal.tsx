@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react';
 
 interface RulesModalProps {
-  gameType: 'hearts' | 'spades' | 'euchre';
+  gameType: 'hearts' | 'spades' | 'euchre' | 'rummy' | 'seven-six';
   open: boolean;
   onClose: () => void;
 }
@@ -141,10 +141,107 @@ const EUCHRE_RULES = {
   ],
 };
 
+const RUMMY_RULES = {
+  title: 'Rummy',
+  overview: 'A classic card game where you draw and discard to form melds — sets of matching ranks or runs of consecutive cards in the same suit. Be the first to go out!',
+  players: '2-6 players',
+  deck: 'Standard 52-card deck',
+  goal: 'Have the fewest points when any player reaches the target score.',
+  sections: [
+    {
+      heading: 'Dealing',
+      items: [
+        '2 players: 10 cards each.',
+        '3-4 players: 7 cards each.',
+        '5-6 players: 6 cards each.',
+        'Remaining cards form a face-down draw pile. The top card is flipped to start the discard pile.',
+      ],
+    },
+    {
+      heading: 'On Your Turn',
+      items: [
+        'Draw one card — either from the draw pile (face down) or the top of the discard pile (face up).',
+        'Optionally lay down melds from your hand.',
+        'Discard one card face up onto the discard pile to end your turn.',
+      ],
+    },
+    {
+      heading: 'Melds',
+      items: [
+        'Set: 3 or 4 cards of the same rank (e.g., three Kings).',
+        'Run: 3 or more consecutive cards of the same suit (e.g., 4-5-6 of Hearts).',
+        'Aces can be low (A-2-3) but not wrap around (K-A-2).',
+      ],
+    },
+    {
+      heading: 'Going Out & Scoring',
+      items: [
+        'A player "goes out" when they have no cards left (through melding and/or discarding).',
+        'Other players score penalty points for cards left in hand: face cards = 10, Aces = 1, number cards = face value.',
+        'The player who went out scores 0 for the round.',
+        'Game ends when someone reaches the target score. Lowest total score wins.',
+      ],
+    },
+  ],
+};
+
+const SEVEN_SIX_RULES = {
+  title: 'Seven-Six',
+  overview: 'A trick-taking bidding game where hand sizes shrink then grow. Bid exactly how many tricks you\'ll take — hit your bid to score, miss and you get zero!',
+  players: '2-7 players',
+  deck: 'Standard 52-card deck (no jokers)',
+  goal: 'Have the highest cumulative score after all rounds.',
+  sections: [
+    {
+      heading: 'Round Structure',
+      items: [
+        'Hands go: 7, 6, 5, 4, 3, 2, 1, 2, 3, 4, 5, 6, 7 (13 rounds for 2-7 players).',
+        'For 8+ players, the max hand size adjusts so cards fit.',
+        'First dealer is chosen by dealing one card each — highest card (suit tiebreak: Spades > Hearts > Clubs > Diamonds) deals first.',
+      ],
+    },
+    {
+      heading: 'Dealing & Trump',
+      items: [
+        'Dealer deals cards clockwise, one at a time.',
+        'After dealing, the top card of the remaining deck is flipped face-up — its suit is trump for the round.',
+      ],
+    },
+    {
+      heading: 'Bidding',
+      items: [
+        'Bidding starts clockwise from the dealer.',
+        'Each player bids how many tricks they expect to win (0 to hand size).',
+        'Dealer restriction: the total of all bids cannot equal the hand size. The dealer must choose a different number.',
+      ],
+    },
+    {
+      heading: 'Playing Tricks',
+      items: [
+        'Player clockwise from dealer leads the first trick.',
+        'You must follow the led suit if you have it. You may only play trump or off-suit cards when you have none of the led suit.',
+        'Trump cannot be led until it has been "broken" (played on a previous trick). Exception: if your hand is all trump.',
+        'Highest trump wins; otherwise, highest card of the led suit wins. Off-suit non-trump never wins.',
+      ],
+    },
+    {
+      heading: 'Scoring',
+      items: [
+        'Hit your bid exactly: score bid + 10 points.',
+        'Miss your bid (over or under): score 0 points.',
+        'Example: bid 3 and take 3 tricks = 13 points. Bid 3 and take 2 or 4 = 0 points.',
+        'Dealer rotates clockwise each round. Highest total score wins.',
+      ],
+    },
+  ],
+};
+
 const RULES: Record<string, typeof HEARTS_RULES> = {
   hearts: HEARTS_RULES,
   spades: SPADES_RULES,
   euchre: EUCHRE_RULES,
+  rummy: RUMMY_RULES,
+  'seven-six': SEVEN_SIX_RULES,
 };
 
 export function RulesModal({ gameType, open, onClose }: RulesModalProps) {

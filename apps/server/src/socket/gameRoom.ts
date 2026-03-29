@@ -5,6 +5,7 @@ import type {
   ServerToClientEvents,
   WaitingRoomState,
   WaitingRoomPlayer,
+  GameConfig,
 } from '@card-game/shared-types';
 import { GamePhase, AIDifficulty, GameType } from '@card-game/shared-types';
 import { GameService } from '../services/GameService.js';
@@ -23,6 +24,8 @@ const PLAYERS_PER_GAME: Record<string, number> = {
   hearts: 4,
   spades: 4,
   euchre: 4,
+  rummy: 4, // default; overridden by config.maxPlayers
+  'seven-six': 4, // default; overridden by config.maxPlayers
 };
 
 // ── Waiting rooms ──
@@ -33,6 +36,7 @@ interface WaitingRoom {
   hostDisplayName: string;
   players: Array<{ socketId: string; displayName: string; userId: string | null }>;
   maxPlayers: number;
+  config?: Partial<GameConfig>;
 }
 
 const waitingRooms = new Map<string, WaitingRoom>();
@@ -295,7 +299,7 @@ export function setupGameHandlers(
     // ── Create a waiting room ──
     socket.on('room:create', async (data) => {
       const roomId = uuidv4().slice(0, 8); // short room code
-      const maxPlayers = PLAYERS_PER_GAME[data.gameType] ?? 4;
+      const maxPlayers = data.config?.maxPlayers ?? PLAYERS_PER_GAME[data.gameType] ?? 4;
 
       const room: WaitingRoom = {
         id: roomId,
@@ -304,6 +308,7 @@ export function setupGameHandlers(
         hostDisplayName: displayName,
         players: [{ socketId: socket.id, displayName, userId }],
         maxPlayers,
+        config: data.config,
       };
 
       waitingRooms.set(roomId, room);
@@ -371,7 +376,7 @@ export function setupGameHandlers(
       }
 
       // Create the actual game
-      const gameId = gameService.createGame(room.gameType);
+      const gameId = gameService.createGame(room.gameType, room.config);
 
       for (const player of room.players) {
         await gameService.joinGame(gameId, player.socketId, player.displayName, player.userId ?? undefined);
@@ -607,7 +612,12 @@ export function setupGameHandlers(
           return;
         }
 
-        await gameService.placeBid(gameId, seat, typeof bid === 'number' ? bid : 0);
+        const room = await gameService.getRoom(gameId);
+        if (room?.gameType === GameType.SevenSix) {
+          await gameService.sevenSixPlaceBid(gameId, seat, typeof bid === 'number' ? bid : 0);
+        } else {
+          await gameService.placeBid(gameId, seat, typeof bid === 'number' ? bid : 0);
+        }
         await broadcastStates(io, gameService, gameId);
 
         // Handle AI bidding (if more AI need to bid after the human)
@@ -648,6 +658,113 @@ export function setupGameHandlers(
         }
       } catch (err: any) {
         socket.emit('game:error', { code: 'TRUMP_FAILED', message: err.message });
+      }
+    });
+
+    // ── Draw card (Rummy) ──
+    socket.on('game:draw_card', async (data) => {
+      try {
+        const { gameId, source } = data;
+        const seat = await gameService.getSeatForSocket(gameId, socket.id);
+        if (seat === undefined) {
+          socket.emit('game:error', { code: 'NOT_IN_GAME', message: 'You are not in this game' });
+          return;
+        }
+
+        await gameService.rummyDraw(gameId, seat, source);
+        await broadcastStates(io, gameService, gameId);
+      } catch (err: any) {
+        socket.emit('game:error', { code: 'DRAW_FAILED', message: err.message });
+      }
+    });
+
+    // ── Lay meld (Rummy) ──
+    socket.on('game:lay_meld', async (data) => {
+      try {
+        const { gameId, cards } = data;
+        const seat = await gameService.getSeatForSocket(gameId, socket.id);
+        if (seat === undefined) {
+          socket.emit('game:error', { code: 'NOT_IN_GAME', message: 'You are not in this game' });
+          return;
+        }
+
+        await gameService.rummyLayMeld(gameId, seat, cards);
+        await broadcastStates(io, gameService, gameId);
+
+        // If round ended from melding out, check game over
+        const phase = await gameService.getPhase(gameId);
+        if (phase === GamePhase.GameOver) {
+          const room = await gameService.getRoom(gameId);
+          if (room) {
+            const state = room.engine.getState();
+            const winner = room.engine.getWinnerSeat();
+            io.to(gameId).emit('game:over', {
+              finalScores: state.scores,
+              winnerSeat: winner,
+            });
+          }
+          return;
+        }
+
+        // If new round started, handle AI turns
+        if (phase === GamePhase.Playing) {
+          await handleAITurns(io, gameService, gameId);
+          await broadcastStates(io, gameService, gameId);
+        }
+      } catch (err: any) {
+        socket.emit('game:error', { code: 'MELD_FAILED', message: err.message });
+      }
+    });
+
+    // ── Discard (Rummy) ──
+    socket.on('game:discard', async (data) => {
+      try {
+        const { gameId, card } = data;
+        const seat = await gameService.getSeatForSocket(gameId, socket.id);
+        if (seat === undefined) {
+          socket.emit('game:error', { code: 'NOT_IN_GAME', message: 'You are not in this game' });
+          return;
+        }
+
+        await gameService.rummyDiscard(gameId, seat, card);
+        await broadcastStates(io, gameService, gameId);
+
+        // Check if round/game ended
+        const phase = await gameService.getPhase(gameId);
+        if (phase === GamePhase.GameOver) {
+          const room = await gameService.getRoom(gameId);
+          if (room) {
+            const state = room.engine.getState();
+            const winner = room.engine.getWinnerSeat();
+            io.to(gameId).emit('game:over', {
+              finalScores: state.scores,
+              winnerSeat: winner,
+            });
+          }
+          return;
+        }
+
+        // Handle AI turns
+        if (phase === GamePhase.Playing) {
+          await handleAITurns(io, gameService, gameId);
+          await broadcastStates(io, gameService, gameId);
+
+          // Check again after AI turns
+          const newPhase = await gameService.getPhase(gameId);
+          if (newPhase === GamePhase.GameOver) {
+            const room = await gameService.getRoom(gameId);
+            if (room) {
+              const state = room.engine.getState();
+              const winner = room.engine.getWinnerSeat();
+              io.to(gameId).emit('game:over', {
+                finalScores: state.scores,
+                winnerSeat: winner,
+              });
+            }
+          }
+        }
+      } catch (err: any) {
+        socket.emit('game:error', { code: 'DISCARD_FAILED', message: err.message });
       }
     });
 
@@ -727,6 +844,7 @@ function toRoomState(room: WaitingRoom): WaitingRoomState {
     })),
     maxPlayers: room.maxPlayers,
     fillWithAI: room.players.length < room.maxPlayers,
+    config: room.config,
   };
 }
 
