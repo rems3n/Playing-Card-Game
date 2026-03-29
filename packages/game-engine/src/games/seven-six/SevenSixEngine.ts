@@ -57,7 +57,8 @@ export class SevenSixEngine extends GameEngine {
 
   /** Build the symmetric round sequence: M, M-1, ..., 1, ..., M-1, M */
   static buildRoundSequence(numPlayers: number): number[] {
-    const maxHand = Math.floor(52 / numPlayers);
+    // 2-7 players: fixed max hand of 7. 8+: largest M where M*players <= 52.
+    const maxHand = numPlayers <= 7 ? 7 : Math.floor(52 / numPlayers);
     const seq: number[] = [];
     for (let h = maxHand; h >= 1; h--) seq.push(h);
     for (let h = 2; h <= maxHand; h++) seq.push(h);
