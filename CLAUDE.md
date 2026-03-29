@@ -1,6 +1,6 @@
 # CardArena — Playing Card Game Platform
 
-Chess.com-inspired web and mobile platform for playing card games (Hearts, Spades, Euchre) against AI or friends.
+Chess.com-inspired web and mobile platform for playing card games (Hearts, Spades, Euchre, Rummy) against AI or friends.
 
 **Production**: https://cardarena.vercel.app
 **Server**: https://playing-card-game-production.up.railway.app
@@ -24,7 +24,7 @@ packages/                   # Pure TS — shared across web, mobile, and server
   shared-types/             # TypeScript interfaces (Card, GameState, socket events, API types)
   shared-socket/            # Platform-agnostic Socket.io client wrapper (web + mobile)
   shared-store/             # Zustand stores — gameStore, lobbyStore, settingsStore (web + mobile)
-  game-engine/              # Game logic — Card, Deck, StateMachine, HeartsEngine, SpadesEngine, EuchreEngine
+  game-engine/              # Game logic — Card, Deck, StateMachine, HeartsEngine, SpadesEngine, EuchreEngine, RummyEngine
   ai/                       # AI strategies — RandomStrategy, HeuristicStrategy, MonteCarloStrategy
 apps/
   server/                   # Fastify + Socket.io — GameService, gameRoom, matchmaking, ratings, friends
@@ -69,7 +69,7 @@ apps/
 - Embedded `StateMachine` enforces valid phase transitions: WAITING → DEALING → [PASSING|BIDDING] → PLAYING → TRICK_RESOLUTION → ROUND_SCORING → GAME_OVER
 - `getVisibleState(seat)` returns personalized state — **never expose other players' cards**
 - Same engine runs on server (authoritative) and client (optimistic validation)
-- `serialize()/restore()` for Redis persistence — HeartsEngine saves pendingPasses, EuchreEngine saves maker/bower/trump state
+- `serialize()/restore()` for Redis persistence — HeartsEngine saves pendingPasses, EuchreEngine saves maker/bower/trump state, RummyEngine saves drawPile/discardPile/playerMelds
 - Event sourcing: all game actions stored as `GameEvent[]` for replay
 
 ### WebSocket Protocol
@@ -89,7 +89,7 @@ apps/
 - 4 difficulty tiers: Beginner (random), Intermediate (heuristic), Advanced (heuristic+), Expert (Monte Carlo)
 - AI runs server-side — clients can't distinguish AI from human players
 - Bot personalities: Dealer Danny (😎), Lucky Lucy (🤩), Card Shark Sally (🦊), Steady Steve (🧐), Professor Pip (🎩), The Oracle (🔮)
-- Per-game AI: SpadesAI (bid counting, trump management), EuchreAI (trump evaluation, bower awareness)
+- Per-game AI: SpadesAI (bid counting, trump management), EuchreAI (trump evaluation, bower awareness), RummyAI (meld finding, draw/discard heuristics)
 
 ### Ratings
 - Glicko-2 with pairwise decomposition for FFA games (Hearts: 4-player → 6 virtual 1v1 matchups)
@@ -168,7 +168,7 @@ Authorized redirects: `http://localhost:3000/api/auth/callback/google`, `https:/
 
 ## Known Issues / TODO
 - Server integration tests need Redis mock for async GameService API
-- Rummy and Poker shown as "Coming Soon" in lobby — engines not implemented yet
+- Poker shown as "Coming Soon" in lobby — engine not implemented yet
 - Mobile app is scaffold only — needs full game UI screens
 - File upload route still exists but unused (photos are base64 now)
 - Google profile photo used as fallback if no custom avatar set

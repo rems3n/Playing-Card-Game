@@ -23,6 +23,7 @@ export interface WaitingRoomState {
   players: WaitingRoomPlayer[];
   maxPlayers: number;
   fillWithAI: boolean;
+  config?: Partial<GameConfig>;
 }
 
 // ── Client → Server events ──
@@ -35,6 +36,9 @@ export interface ClientToServerEvents {
   'game:pass_cards': (data: { gameId: string; cards: Card[] }) => void;
   'game:call_trump': (data: { gameId: string; suit: string | 'pass' }) => void;
   'game:go_alone': (data: { gameId: string }) => void;
+  'game:draw_card': (data: { gameId: string; source: 'stock' | 'discard' }) => void;
+  'game:lay_meld': (data: { gameId: string; cards: Card[] }) => void;
+  'game:discard': (data: { gameId: string; card: Card }) => void;
   'game:replace_with_ai': (data: { gameId: string; seatIndex: number }) => void;
   'game:end': (data: { gameId: string }) => void;
 

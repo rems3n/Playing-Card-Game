@@ -102,6 +102,18 @@ export default function WaitingRoomPage() {
           <p className="text-[var(--text-muted)] text-sm mt-1">Waiting for players...</p>
         </div>
 
+        {/* Game settings (if custom) */}
+        {room.config?.targetScore && (
+          <div className="bg-[var(--bg-primary)] rounded-lg px-4 py-2.5 mb-4">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-[var(--text-muted)] uppercase tracking-wider">
+                {room.gameType === 'hearts' ? 'Points to Lose' : 'Points to Win'}
+              </span>
+              <span className="text-sm font-bold font-mono">{room.config.targetScore}</span>
+            </div>
+          </div>
+        )}
+
         {/* Room code + copy link */}
         <div className="flex items-center justify-between bg-[var(--bg-primary)] rounded-lg px-4 py-3 mb-4">
           <div>
