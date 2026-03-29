@@ -110,15 +110,36 @@ export function GameBoard() {
   const isPassing = gameState.phase === GamePhase.Passing;
   const isBidding = gameState.phase === GamePhase.Bidding;
 
-  const getPos = (seatIndex: number): 'top' | 'left' | 'right' | 'bottom' => {
-    const r = (seatIndex - gameState.mySeat + gameState.players.length) % gameState.players.length;
-    return (['bottom', 'left', 'top', 'right'] as const)[r];
-  };
-
+  // Distribute opponents around the table based on player count
+  const numPlayers = gameState.players.length;
   const myPlayer = gameState.players.find((p) => p.seatIndex === gameState.mySeat)!;
-  const topPlayer = gameState.players.find((p) => getPos(p.seatIndex) === 'top');
-  const leftPlayer = gameState.players.find((p) => getPos(p.seatIndex) === 'left');
-  const rightPlayer = gameState.players.find((p) => getPos(p.seatIndex) === 'right');
+
+  // Opponents ordered clockwise from left of me
+  const opponents = Array.from({ length: numPlayers - 1 }, (_, i) => {
+    const seat = (gameState.mySeat + 1 + i) % numPlayers;
+    return gameState.players.find((p) => p.seatIndex === seat)!;
+  });
+
+  // Assign positions: left side, top row, right side
+  let leftPlayers: typeof opponents = [];
+  let topPlayers: typeof opponents = [];
+  let rightPlayers: typeof opponents = [];
+
+  if (opponents.length <= 1) {
+    topPlayers = opponents;
+  } else if (opponents.length === 2) {
+    leftPlayers = [opponents[0]];
+    rightPlayers = [opponents[1]];
+  } else if (opponents.length === 3) {
+    leftPlayers = [opponents[0]];
+    topPlayers = [opponents[1]];
+    rightPlayers = [opponents[2]];
+  } else {
+    // 4+ opponents: distribute evenly — left, top (bulk), right
+    leftPlayers = [opponents[0]];
+    rightPlayers = [opponents[opponents.length - 1]];
+    topPlayers = opponents.slice(1, -1);
+  }
 
   const isCardLegal = (card: Card) =>
     gameState.legalMoves.some((m) => m.suit === card.suit && m.rank === card.rank);
@@ -256,27 +277,27 @@ export function GameBoard() {
               </div>
             )}
 
-            {/* Top player */}
-            <div className="flex justify-center">
-              {topPlayer && (
-                <PlayerSeat player={topPlayer} isCurrentTurn={gameState.currentPlayerSeat === topPlayer.seatIndex} position="top" scale={scale} />
-              )}
+            {/* Top players */}
+            <div className="flex justify-center" style={{ gap: 16 * scale }}>
+              {topPlayers.map((p) => (
+                <PlayerSeat key={p.seatIndex} player={p} isCurrentTurn={gameState.currentPlayerSeat === p.seatIndex} position="top" scale={scale} />
+              ))}
             </div>
 
             {/* Middle: left — trick — right */}
             <div className="flex-1 flex items-center justify-between my-3" style={{ gap: 12 * scale }}>
-              <div className="shrink-0 flex justify-start" style={{ width: 220 * scale }}>
-                {leftPlayer && (
-                  <PlayerSeat player={leftPlayer} isCurrentTurn={gameState.currentPlayerSeat === leftPlayer.seatIndex} position="left" scale={scale} />
-                )}
+              <div className="shrink-0 flex flex-col justify-center" style={{ width: 220 * scale, gap: 12 * scale }}>
+                {leftPlayers.map((p) => (
+                  <PlayerSeat key={p.seatIndex} player={p} isCurrentTurn={gameState.currentPlayerSeat === p.seatIndex} position="left" scale={scale} />
+                ))}
               </div>
 
               <TrickArea currentTrick={gameState.currentTrick} mySeat={gameState.mySeat} numPlayers={gameState.players.length} scale={scale} />
 
-              <div className="shrink-0 flex justify-end" style={{ width: 220 * scale }}>
-                {rightPlayer && (
-                  <PlayerSeat player={rightPlayer} isCurrentTurn={gameState.currentPlayerSeat === rightPlayer.seatIndex} position="right" scale={scale} />
-                )}
+              <div className="shrink-0 flex flex-col justify-center" style={{ width: 220 * scale, gap: 12 * scale }}>
+                {rightPlayers.map((p) => (
+                  <PlayerSeat key={p.seatIndex} player={p} isCurrentTurn={gameState.currentPlayerSeat === p.seatIndex} position="right" scale={scale} />
+                ))}
               </div>
             </div>
 
