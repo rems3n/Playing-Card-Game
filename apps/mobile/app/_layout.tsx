@@ -14,7 +14,7 @@ export default function RootLayout() {
           contentStyle: { backgroundColor: colors.bgPrimary },
         }}
       >
-        <Stack.Screen name="index" options={{ title: 'CardArena' }} />
+        <Stack.Screen name="index" options={{ title: 'Seven-Six' }} />
         <Stack.Screen name="game/[id]" options={{ title: 'Game', headerShown: false }} />
       </Stack>
     </>

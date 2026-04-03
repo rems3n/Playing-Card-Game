@@ -42,9 +42,8 @@ export default function LobbyScreen() {
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
       <Text style={styles.title}>
-        <Text style={{ color: colors.accentGold }}>Card</Text>Arena
+        <Text style={{ color: colors.accentGold }}>Seven</Text>-Six
       </Text>
-      <Text style={styles.subtitle}>Seven-Six</Text>
       <Text style={styles.description}>
         Bid exactly how many tricks you'll win.{'\n'}
         Hands shrink then grow — every round counts!
