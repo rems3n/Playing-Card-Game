@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { GameType, AIDifficulty } from '@card-game/shared-types';
@@ -6,17 +6,21 @@ import { useGameStore } from '@card-game/shared-store';
 import { useSocket } from '../src/hooks/useSocket';
 import { colors } from '../src/constants/theme';
 
-const GAMES = [
-  { type: GameType.Hearts, name: 'Hearts', icon: '♥' },
-  { type: GameType.Spades, name: 'Spades', icon: '♠' },
-  { type: GameType.Euchre, name: 'Euchre', icon: '🃏' },
+const PLAYER_COUNTS = [2, 3, 4, 5, 6, 7];
+
+const DIFFICULTIES = [
+  { value: AIDifficulty.Beginner, label: 'Beginner', desc: 'Random play' },
+  { value: AIDifficulty.Intermediate, label: 'Intermediate', desc: 'Smart play' },
+  { value: AIDifficulty.Advanced, label: 'Advanced', desc: 'Card counting' },
+  { value: AIDifficulty.Expert, label: 'Expert', desc: 'Monte Carlo' },
 ];
 
 export default function LobbyScreen() {
   const router = useRouter();
   const socket = useSocket();
   const { setGameId } = useGameStore();
-  const [selectedGame, setSelectedGame] = useState(GameType.Hearts);
+  const [playerCount, setPlayerCount] = useState(4);
+  const [difficulty, setDifficulty] = useState(AIDifficulty.Beginner);
   const [creating, setCreating] = useState(false);
 
   const handlePlay = () => {
@@ -28,35 +32,54 @@ export default function LobbyScreen() {
     });
 
     socket.emit('lobby:create_game', {
-      gameType: selectedGame,
-      aiDifficulty: AIDifficulty.Intermediate,
+      gameType: GameType.SevenSix,
+      config: playerCount !== 4 ? { maxPlayers: playerCount } : undefined,
+      aiDifficulty: difficulty,
       fillWithAI: true,
     });
   };
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
       <Text style={styles.title}>
         <Text style={{ color: colors.accentGold }}>Card</Text>Arena
       </Text>
-      <Text style={styles.subtitle}>Play card games against AI or friends</Text>
+      <Text style={styles.subtitle}>Seven-Six</Text>
+      <Text style={styles.description}>
+        Bid exactly how many tricks you'll win.{'\n'}
+        Hands shrink then grow — every round counts!
+      </Text>
 
-      <View style={styles.gameList}>
-        {GAMES.map((game) => (
+      {/* Player count */}
+      <Text style={styles.sectionLabel}>Players</Text>
+      <View style={styles.chipRow}>
+        {PLAYER_COUNTS.map((n) => (
           <TouchableOpacity
-            key={game.type}
-            style={[
-              styles.gameCard,
-              selectedGame === game.type && styles.gameCardSelected,
-            ]}
-            onPress={() => setSelectedGame(game.type)}
+            key={n}
+            style={[styles.chip, playerCount === n && styles.chipSelected]}
+            onPress={() => setPlayerCount(n)}
           >
-            <Text style={styles.gameIcon}>{game.icon}</Text>
-            <Text style={styles.gameName}>{game.name}</Text>
+            <Text style={[styles.chipText, playerCount === n && styles.chipTextSelected]}>{n}</Text>
           </TouchableOpacity>
         ))}
       </View>
 
+      {/* Difficulty */}
+      <Text style={styles.sectionLabel}>AI Difficulty</Text>
+      <View style={styles.diffList}>
+        {DIFFICULTIES.map((d) => (
+          <TouchableOpacity
+            key={d.value}
+            style={[styles.diffCard, difficulty === d.value && styles.diffCardSelected]}
+            onPress={() => setDifficulty(d.value)}
+          >
+            <Text style={[styles.diffLabel, difficulty === d.value && styles.diffLabelSelected]}>{d.label}</Text>
+            <Text style={styles.diffDesc}>{d.desc}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Play button */}
       <TouchableOpacity
         style={[styles.playButton, creating && styles.playButtonDisabled]}
         onPress={handlePlay}
@@ -66,61 +89,109 @@ export default function LobbyScreen() {
           {creating ? 'Creating...' : 'Play vs AI'}
         </Text>
       </TouchableOpacity>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
+  scroll: { flex: 1, backgroundColor: colors.bgPrimary },
   container: {
-    flex: 1,
     padding: 24,
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.bgPrimary,
+    paddingTop: 40,
+    paddingBottom: 40,
   },
   title: {
     fontSize: 32,
     fontWeight: 'bold',
     color: colors.textPrimary,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: 20,
+    fontWeight: '600',
+    color: colors.accentGold,
+    marginBottom: 8,
+  },
+  description: {
+    fontSize: 13,
     color: colors.textSecondary,
-    marginBottom: 32,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 28,
   },
-  gameList: {
+  sectionLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    alignSelf: 'flex-start',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  chipRow: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 32,
+    gap: 8,
+    marginBottom: 24,
+    alignSelf: 'stretch',
+    justifyContent: 'center',
   },
-  gameCard: {
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderRadius: 12,
+  chip: {
+    width: 42,
+    height: 42,
+    borderRadius: 8,
+    backgroundColor: colors.bgSecondary,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  chipSelected: {
+    backgroundColor: colors.accentGreen,
+    borderColor: colors.accentGreen,
+  },
+  chipText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: colors.textSecondary,
+  },
+  chipTextSelected: {
+    color: '#fff',
+  },
+  diffList: {
+    alignSelf: 'stretch',
+    gap: 8,
+    marginBottom: 28,
+  },
+  diffCard: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
     borderWidth: 2,
     borderColor: colors.borderSubtle,
     backgroundColor: colors.bgSecondary,
-    alignItems: 'center',
-    minWidth: 90,
   },
-  gameCardSelected: {
-    borderColor: colors.accentGold,
-    backgroundColor: 'rgba(232, 166, 58, 0.1)',
+  diffCardSelected: {
+    borderColor: colors.accentGreen,
+    backgroundColor: 'rgba(129, 182, 76, 0.1)',
   },
-  gameIcon: {
-    fontSize: 28,
-    marginBottom: 4,
-  },
-  gameName: {
-    fontSize: 13,
+  diffLabel: {
+    fontSize: 14,
     fontWeight: '600',
     color: colors.textPrimary,
   },
+  diffLabelSelected: {
+    color: colors.accentGreen,
+  },
+  diffDesc: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
   playButton: {
-    paddingVertical: 14,
-    paddingHorizontal: 48,
-    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 56,
+    borderRadius: 14,
     backgroundColor: colors.accentGreen,
   },
   playButtonDisabled: {

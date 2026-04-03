@@ -1,7 +1,10 @@
 import { useEffect, useRef } from 'react';
 import { getSocket, type GameSocket } from '@card-game/shared-socket';
+import Constants from 'expo-constants';
 
-const SERVER_URL = 'http://localhost:3001'; // TODO: configure per environment
+const SERVER_URL =
+  Constants.expoConfig?.extra?.serverUrl ??
+  'https://playing-card-game-production.up.railway.app';
 
 export function useSocket(displayName: string = 'Player', email: string = ''): GameSocket {
   const socketRef = useRef<GameSocket>(

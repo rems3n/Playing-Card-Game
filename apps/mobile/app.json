@@ -12,7 +12,8 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.cardarena.app"
+      "bundleIdentifier": "com.cardarena.app",
+      "buildNumber": "1"
     },
     "android": {
       "adaptiveIcon": {
@@ -20,6 +21,9 @@
       },
       "package": "com.cardarena.app"
     },
-    "plugins": ["expo-router", "expo-secure-store"]
+    "plugins": ["expo-router", "expo-secure-store"],
+    "extra": {
+      "serverUrl": "https://playing-card-game-production.up.railway.app"
+    }
   }
 }
