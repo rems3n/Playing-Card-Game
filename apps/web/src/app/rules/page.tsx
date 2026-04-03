@@ -5,46 +5,26 @@ import { RulesModal } from '@/components/RulesModal';
 
 const GAMES = [
   {
-    type: 'hearts' as const,
-    title: 'Hearts',
-    tagline: 'Avoid the Queen and dodge those hearts',
-    players: '4 players',
+    type: 'seven-six' as const,
+    title: 'Seven-Six',
+    tagline: 'Bid smart, hit your number, climb the ranks',
+    players: '2-7 players',
     difficulty: 'Easy to learn',
-    color: 'var(--accent-red)',
-    icon: '\u2665',
-    summary: 'A classic trick-avoidance game. Every heart is worth 1 point and the Queen of Spades is worth 13 — you want the lowest score. Unless you shoot the moon.',
-  },
-  {
-    type: 'spades' as const,
-    title: 'Spades',
-    tagline: 'Bid smart, play bold, trust your partner',
-    players: '4 players (2v2)',
-    difficulty: 'Moderate',
-    color: 'var(--accent-blue)',
-    icon: '\u2660',
-    summary: 'A partnership bidding game where spades are always trump. Bid the number of tricks your team will take, then work together to make your contract.',
-  },
-  {
-    type: 'euchre' as const,
-    title: 'Euchre',
-    tagline: 'Fast tricks, big bowers, bold calls',
-    players: '4 players (2v2)',
-    difficulty: 'Moderate',
     color: 'var(--accent-gold)',
-    icon: '\u265A',
-    summary: 'A quick partnership game with just 24 cards. Call trump, watch out for the bowers, and try to take at least 3 of 5 tricks to score.',
+    icon: '7',
+    summary: 'A trick-taking bidding game where hand sizes shrink then grow. Bid exactly how many tricks you\'ll take — hit your bid to score bid + 10, miss and you get zero. Trump is revealed each round by flipping a card.',
   },
 ];
 
 export default function RulesPage() {
-  const [activeGame, setActiveGame] = useState<'hearts' | 'spades' | 'euchre' | null>(null);
+  const [activeGame, setActiveGame] = useState<'seven-six' | null>(null);
 
   return (
     <div className="max-w-3xl mx-auto p-6">
       <div className="mb-6">
         <h1 className="text-lg font-bold mb-1">Games & Rules</h1>
         <p className="text-[13px] text-[var(--text-secondary)]">
-          Learn how to play each card game. Click any game to see the full rules.
+          Learn how to play. Click the game to see the full rules.
         </p>
       </div>
 

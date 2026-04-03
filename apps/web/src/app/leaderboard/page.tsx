@@ -18,14 +18,12 @@ interface LeaderboardEntry {
 }
 
 const GAME_TABS = [
-  { type: 'hearts', label: 'Hearts', icon: '♥', color: 'text-red-500' },
-  { type: 'spades', label: 'Spades', icon: '♠', color: 'text-blue-400' },
-  { type: 'euchre', label: 'Euchre', icon: '🃏', color: 'text-yellow-400' },
+  { type: 'seven-six', label: 'Seven-Six', icon: '7', color: 'text-purple-400' },
 ];
 
 export default function LeaderboardPage() {
   const { data: session } = useSession();
-  const [gameType, setGameType] = useState('hearts');
+  const [gameType, setGameType] = useState('seven-six');
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [myRank, setMyRank] = useState<{ rank: number; rating: number } | null>(null);
   const [loading, setLoading] = useState(true);

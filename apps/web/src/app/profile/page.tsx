@@ -110,7 +110,7 @@ export default function ProfilePage() {
         }
         // Fetch rating histories for charts
         const histories: Record<string, Array<{ date: string; rating: number }>> = {};
-        for (const gameType of ['hearts', 'spades', 'euchre']) {
+        for (const gameType of ['seven-six']) {
           try {
             const histRes = await fetch(
               `${SERVER_URL}/api/ratings/history?email=${encodeURIComponent(email)}&gameType=${gameType}&days=90`,

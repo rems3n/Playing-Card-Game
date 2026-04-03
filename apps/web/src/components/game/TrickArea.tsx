@@ -10,32 +10,54 @@ interface TrickAreaProps {
   scale?: number;
 }
 
-const POSITIONS: Record<number, string> = {
-  0: 'bottom-[4%] left-1/2 -translate-x-1/2',
-  1: 'left-[4%] top-1/2 -translate-y-1/2',
-  2: 'top-[4%] left-1/2 -translate-x-1/2',
-  3: 'right-[4%] top-1/2 -translate-y-1/2',
-};
+/**
+ * Compute (x%, y%) position for a player's card in the trick area.
+ * Player 0 (me) is at the bottom, others distributed clockwise.
+ * Returns CSS top/left percentages for absolute positioning.
+ */
+function getCardPosition(relativeIndex: number, numPlayers: number): { top: string; left: string } {
+  // Angle: start at bottom (270°/3π/2) and go clockwise
+  const angleStep = (2 * Math.PI) / numPlayers;
+  const angle = (3 * Math.PI) / 2 + relativeIndex * angleStep;
 
-const ANIM_CLASS: Record<number, string> = {
-  0: 'animate-card-from-bottom',
-  1: 'animate-card-from-left',
-  2: 'animate-card-from-top',
-  3: 'animate-card-from-right',
-};
+  // Elliptical radius — wider than tall to match the table shape
+  const rx = 38; // horizontal radius %
+  const ry = 36; // vertical radius %
+
+  const left = 50 + rx * Math.cos(angle);
+  const top = 50 + ry * Math.sin(angle);
+
+  return { top: `${top}%`, left: `${left}%` };
+}
+
+/** Pick the closest directional animation based on angle. */
+function getAnimClass(relativeIndex: number, numPlayers: number): string {
+  const angleStep = (2 * Math.PI) / numPlayers;
+  const angle = (3 * Math.PI) / 2 + relativeIndex * angleStep;
+  // Normalize to [0, 2π)
+  const norm = ((angle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+
+  // Map to closest cardinal direction
+  if (norm >= (7 * Math.PI) / 4 || norm < Math.PI / 4) return 'animate-card-from-right';
+  if (norm >= Math.PI / 4 && norm < (3 * Math.PI) / 4) return 'animate-card-from-bottom';
+  if (norm >= (3 * Math.PI) / 4 && norm < (5 * Math.PI) / 4) return 'animate-card-from-left';
+  return 'animate-card-from-top';
+}
 
 export function TrickArea({ currentTrick, mySeat, numPlayers, scale = 1 }: TrickAreaProps) {
-  // Full-size cards are 56x80 at scale 1. Area needs to fit 4 cards around a center.
   const areaSize = 240 * scale;
 
   return (
     <div className="relative shrink-0" style={{ width: areaSize, height: areaSize }}>
       {currentTrick.map(({ seatIndex, card }) => {
         const relative = (seatIndex - mySeat + numPlayers) % numPlayers;
+        const pos = getCardPosition(relative, numPlayers);
+        const anim = getAnimClass(relative, numPlayers);
         return (
           <div
             key={`${card.suit}${card.rank}`}
-            className={`absolute ${POSITIONS[relative] ?? ''} ${ANIM_CLASS[relative] ?? ''}`}
+            className={`absolute -translate-x-1/2 -translate-y-1/2 ${anim}`}
+            style={{ top: pos.top, left: pos.left }}
           >
             <PlayingCard card={card} scale={scale} />
           </div>

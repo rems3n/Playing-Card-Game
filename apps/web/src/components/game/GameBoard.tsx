@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useCallback, useState, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { GamePhase, GameType, type Card } from '@card-game/shared-types';
 import { useSocket } from '@/hooks/useSocket';
 import { useScale } from '@/hooks/useScale';
@@ -15,6 +16,7 @@ import { RulesModal } from '../RulesModal';
 import { RummyBoard } from './RummyBoard';
 
 export function GameBoard() {
+  const router = useRouter();
   const socket = useSocket();
   const {
     gameId, gameState, selectedCards, gameOver, error,
@@ -155,14 +157,41 @@ export function GameBoard() {
         {/* Game over banner */}
         {gameOver && (
           <div className="px-4 py-3 rounded-lg bg-[var(--accent-gold)]/10 border border-[var(--accent-gold)]/30">
-            <div className="text-base font-bold text-[var(--accent-gold)]">Game Over</div>
-            <div className="text-sm mt-1">
-              Winner: {gameState.players[gameOver.winnerSeat]?.displayName}
-            </div>
-            <div className="flex gap-3 mt-1.5 text-[12px] text-[var(--text-secondary)]">
-              {gameOver.finalScores.map((score, i) => (
-                <span key={i}>{gameState.players[i]?.displayName}: <span className="font-bold text-[var(--text-primary)]">{score}</span></span>
-              ))}
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="text-base font-bold text-[var(--accent-gold)]">Game Over</div>
+                <div className="text-sm mt-1">
+                  Winner: {gameState.players[gameOver.winnerSeat]?.displayName}
+                </div>
+                <div className="flex gap-3 mt-1.5 text-[12px] text-[var(--text-secondary)] flex-wrap">
+                  {gameOver.finalScores.map((score, i) => (
+                    <span key={i}>{gameState.players[i]?.displayName}: <span className="font-bold text-[var(--text-primary)]">{score}</span></span>
+                  ))}
+                </div>
+              </div>
+              <div className="flex gap-2 shrink-0 ml-4">
+                <button
+                  onClick={() => {
+                    socket.once('lobby:game_created', ({ gameId: newId }) => {
+                      router.push(`/game/${newId}`);
+                    });
+                    socket.emit('lobby:create_game', {
+                      gameType: gameState.gameType,
+                      config: gameState.config,
+                      fillWithAI: true,
+                    });
+                  }}
+                  className="px-3 py-1.5 text-[12px] font-medium bg-[var(--accent-green)] text-white rounded hover:brightness-110 transition-all"
+                >
+                  Play Again
+                </button>
+                <button
+                  onClick={() => router.push('/')}
+                  className="px-3 py-1.5 text-[12px] border border-[var(--border-subtle)] rounded hover:bg-white/[0.04] transition-colors"
+                >
+                  Lobby
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -349,7 +378,7 @@ export function GameBoard() {
 
       {/* Sidebar */}
       <div className="w-56 shrink-0 flex flex-col gap-2 h-full">
-        <ScoreBoard players={gameState.players} scores={gameState.scores} roundScores={gameState.roundScores} mySeat={gameState.mySeat} />
+        <ScoreBoard players={gameState.players} scores={gameState.scores} roundScores={gameState.roundScores} mySeat={gameState.mySeat} bids={gameState.bids} dealerSeat={gameState.dealerSeat} />
 
         <div className="bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-subtle)] overflow-hidden">
           <div className="px-3 py-2 border-b border-[var(--border-subtle)]">

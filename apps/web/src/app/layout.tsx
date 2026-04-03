@@ -4,8 +4,8 @@ import { AuthProvider } from '@/components/AuthProvider';
 import { Sidebar } from '@/components/Sidebar';
 
 export const metadata: Metadata = {
-  title: 'CardArena - Play Card Games Online',
-  description: 'Play Hearts, Spades, and Euchre online against friends or AI opponents',
+  title: 'CardArena - Seven-Six Card Game',
+  description: 'Play Seven-Six online — a trick-taking bidding card game for 2-7 players. Challenge AI or play with friends!',
 };
 
 export default function RootLayout({
