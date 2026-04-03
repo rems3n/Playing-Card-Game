@@ -14,17 +14,9 @@ export default function GamePage() {
   const socket = useSocket();
   const { gameId, setGameId, reset } = useGameStore();
 
-  // Redirect to lobby if signed out
-  useEffect(() => {
-    if (status === 'unauthenticated') {
-      reset();
-      router.push('/');
-    }
-  }, [status, reset, router]);
-
   // Join game room on mount and on reconnect
   useEffect(() => {
-    if (!params.id) return;
+    if (!params.id || status === 'loading') return;
 
     function joinGame() {
       setGameId(params.id);
@@ -42,11 +34,7 @@ export default function GamePage() {
     return () => {
       socket.off('connect', joinGame);
     };
-  }, [params.id, socket, setGameId]);
-
-  if (status === 'unauthenticated') {
-    return null;
-  }
+  }, [params.id, socket, setGameId, status]);
 
   return (
     <div className="h-full">
