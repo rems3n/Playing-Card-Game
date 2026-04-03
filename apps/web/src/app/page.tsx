@@ -10,42 +10,6 @@ import { FriendsList } from '@/components/lobby/FriendsList';
 
 const GAME_OPTIONS = [
   {
-    type: GameType.Hearts,
-    name: 'Hearts',
-    icon: '♥',
-    color: 'text-red-500',
-    description: 'Avoid taking hearts and the queen of spades. Lowest score wins!',
-    players: '4 players',
-    available: true,
-  },
-  {
-    type: GameType.Spades,
-    name: 'Spades',
-    icon: '♠',
-    color: 'text-blue-400',
-    description: 'Bid tricks with your partner. Meet your bid to score points.',
-    players: '4 players (2v2)',
-    available: true,
-  },
-  {
-    type: GameType.Euchre,
-    name: 'Euchre',
-    icon: '🃏',
-    color: 'text-yellow-400',
-    description: 'Call trump, take tricks, and race to 10 points with your partner.',
-    players: '4 players (2v2)',
-    available: true,
-  },
-  {
-    type: GameType.Rummy,
-    name: 'Rummy',
-    icon: '🂡',
-    color: 'text-green-400',
-    description: 'Form sets and runs to be the first to go out. Classic meld-building game.',
-    players: '2-6 players',
-    available: true,
-  },
-  {
     type: GameType.SevenSix,
     name: 'Seven-Six',
     icon: '7',
@@ -53,15 +17,6 @@ const GAME_OPTIONS = [
     description: 'Bid exactly how many tricks you\'ll win. Hands shrink then grow — every round counts!',
     players: '2-7 players',
     available: true,
-  },
-  {
-    type: 'poker' as GameType,
-    name: 'Poker',
-    icon: '🎰',
-    color: 'text-amber-400',
-    description: 'Texas Hold\'em. Bet, bluff, and build the best 5-card hand.',
-    players: '2-8 players',
-    available: false,
   },
 ];
 
@@ -93,8 +48,8 @@ export default function LobbyPage() {
   const socket = useSocket();
   const { data: session } = useSession();
   const { setGameId } = useGameStore();
-  const [selectedGame, setSelectedGame] = useState<GameType>(GameType.Hearts);
-  const [targetScore, setTargetScore] = useState<number>(DEFAULT_TARGET_SCORES[GameType.Hearts]);
+  const [selectedGame, setSelectedGame] = useState<GameType>(GameType.SevenSix);
+  const [targetScore, setTargetScore] = useState<number>(DEFAULT_TARGET_SCORES[GameType.SevenSix]);
   const [playerCount, setPlayerCount] = useState<number>(4);
   const [difficulty, setDifficulty] = useState<AIDifficulty>(AIDifficulty.Beginner);
   const [isCreating, setIsCreating] = useState(false);
