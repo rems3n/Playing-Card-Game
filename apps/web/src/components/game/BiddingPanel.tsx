@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import type { VisibleGameState } from '@card-game/shared-types';
-import { GameType } from '@card-game/shared-types';
+import { GameType, Suit } from '@card-game/shared-types';
 
 interface BiddingPanelProps {
   gameState: VisibleGameState;
@@ -149,6 +149,8 @@ export function BiddingPanel({ gameState, onBid, onCallTrump }: BiddingPanelProp
   }
 
   if (gameState.gameType === GameType.Euchre) {
+    const legalCalls = gameState.legalTrumpCalls ?? [];
+    const suitNames: Record<string, string> = { H: 'Hearts', D: 'Diamonds', C: 'Clubs', S: 'Spades' };
     const suits = [
       { suit: 'H', symbol: '\u2665', color: 'text-[#c33]' },
       { suit: 'D', symbol: '\u2666', color: 'text-[#c33]' },
@@ -159,6 +161,11 @@ export function BiddingPanel({ gameState, onBid, onCallTrump }: BiddingPanelProp
     return (
       <div className="bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-subtle)] p-4 text-center">
         <div className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3">Call Trump</div>
+        <p className="text-sm text-[var(--text-secondary)] mb-3">
+          {gameState.trumpCallRound === 1
+            ? `Order up ${suitNames[gameState.turnedUpCard?.suit ?? ''] ?? 'the turned suit'}, or pass.`
+            : 'Choose a different suit. The dealer must call.'}
+        </p>
 
         {isMyTurn ? (
           <div>
@@ -168,7 +175,9 @@ export function BiddingPanel({ gameState, onBid, onCallTrump }: BiddingPanelProp
                 <button
                   key={s.suit}
                   onClick={() => onCallTrump(s.suit)}
-                  className="w-12 h-12 rounded-lg border border-[var(--border-subtle)] hover:border-[var(--accent-gold)] hover:bg-[var(--accent-gold)]/8 flex items-center justify-center transition-all"
+                  disabled={!legalCalls.includes(s.suit as Suit)}
+                  aria-label={`Call ${suitNames[s.suit]}`}
+                  className="w-12 h-12 rounded-lg border border-[var(--border-subtle)] enabled:hover:border-[var(--accent-gold)] disabled:opacity-25 disabled:cursor-not-allowed flex items-center justify-center transition-all"
                 >
                   <span className={`text-2xl ${s.color}`}>{s.symbol}</span>
                 </button>
@@ -176,7 +185,8 @@ export function BiddingPanel({ gameState, onBid, onCallTrump }: BiddingPanelProp
             </div>
             <button
               onClick={() => onCallTrump('pass')}
-              className="px-5 py-1.5 text-[12px] border border-[var(--border-subtle)] rounded hover:bg-white/[0.04] transition-colors"
+              disabled={!legalCalls.includes('pass')}
+              className="min-h-11 px-5 text-sm border border-[var(--border-subtle)] rounded enabled:hover:bg-white/[0.04] disabled:opacity-25 transition-colors"
             >Pass</button>
           </div>
         ) : (

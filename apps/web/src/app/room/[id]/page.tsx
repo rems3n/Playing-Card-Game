@@ -21,6 +21,7 @@ export default function WaitingRoomPage() {
     if (!params.id || status === 'loading') return;
 
     function onUpdate(state: WaitingRoomState) {
+      if (state.roomId !== params.id) return;
       setRoom(state);
       setError(null);
     }
@@ -42,16 +43,16 @@ export default function WaitingRoomPage() {
     if (socket.connected) {
       socket.emit('room:join', { roomId: params.id });
     }
-    socket.on('connect', () => {
+    function onConnect() {
       socket.emit('room:join', { roomId: params.id });
-    });
+    }
+    socket.on('connect', onConnect);
 
     return () => {
       socket.off('room:update', onUpdate);
       socket.off('room:started', onStarted);
       socket.off('room:error', onError);
-      socket.off('connect');
-      socket.emit('room:leave', { roomId: params.id });
+      socket.off('connect', onConnect);
     };
   }, [params.id, socket, status, setGameId, router]);
 
@@ -75,7 +76,7 @@ export default function WaitingRoomPage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const isHost = room?.players.some((p) => p.isHost && p.displayName === room.host);
+  const isHost = room?.players.some((p) => p.isHost && p.seatIndex === room.mySeat);
 
   if (status === 'loading' || !room) {
     return (
@@ -85,6 +86,7 @@ export default function WaitingRoomPage() {
           <div className="text-[var(--text-muted)] text-sm">
             {error ?? 'Joining room...'}
           </div>
+          {error && <button className="mt-4 min-h-11 px-4 rounded border border-white/20" onClick={handleLeave}>Back to games</button>}
         </div>
       </div>
     );

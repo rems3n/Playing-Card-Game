@@ -1,0 +1,31 @@
+FROM node:22-alpine AS builder
+WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1
+
+COPY package.json package-lock.json turbo.json tsconfig.base.json ./
+COPY packages/shared-types/package.json packages/shared-types/
+COPY packages/game-engine/package.json packages/game-engine/
+COPY packages/ai/package.json packages/ai/
+COPY packages/shared-socket/package.json packages/shared-socket/
+COPY packages/shared-store/package.json packages/shared-store/
+COPY apps/server/package.json apps/server/
+COPY apps/web/package.json apps/web/
+COPY apps/mobile/package.json apps/mobile/
+RUN npm ci --ignore-scripts
+COPY packages/ packages/
+COPY apps/web/ apps/web/
+
+# Browser requests need the public HTTPS game-server URL, baked into Next.js.
+ARG NEXT_PUBLIC_SERVER_URL
+ENV NEXT_PUBLIC_SERVER_URL=$NEXT_PUBLIC_SERVER_URL
+RUN test -n "$NEXT_PUBLIC_SERVER_URL" && mkdir -p apps/web/public && npx turbo run build --filter=@card-game/web
+
+FROM node:22-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 HOSTNAME=0.0.0.0 PORT=3000
+COPY --from=builder --chown=node:node /app/apps/web/.next/standalone ./
+COPY --from=builder --chown=node:node /app/apps/web/.next/static ./apps/web/.next/static
+COPY --from=builder --chown=node:node /app/apps/web/public ./apps/web/public
+USER node
+EXPOSE 3000
+CMD ["node", "apps/web/server.js"]

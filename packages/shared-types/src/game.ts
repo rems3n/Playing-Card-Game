@@ -149,6 +149,10 @@ export interface VisibleGameState {
   myHand: Card[];
   mySeat: number;
   legalMoves: Card[];
+  // Euchre bidding options are supplied by the authoritative engine.
+  turnedUpCard?: Card;
+  trumpCallRound?: number;
+  legalTrumpCalls?: Array<Suit | 'pass'>;
   // Rummy-specific (visible to all)
   drawPileCount?: number;
   discardTop?: Card | null;

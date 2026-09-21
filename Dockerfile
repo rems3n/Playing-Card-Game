@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
@@ -14,9 +14,11 @@ COPY apps/server/package.json apps/server/
 # Stub out packages the server doesn't need but npm workspaces expects
 COPY packages/shared-socket/package.json packages/shared-socket/
 COPY packages/shared-store/package.json packages/shared-store/
+COPY apps/web/package.json apps/web/
+COPY apps/mobile/package.json apps/mobile/
 
 # Install deps
-RUN npm install --ignore-scripts
+RUN npm ci --ignore-scripts
 
 # Copy source
 COPY packages/shared-types/ packages/shared-types/
@@ -28,7 +30,7 @@ COPY apps/server/ apps/server/
 RUN npx turbo run build --filter=@card-game/server
 
 # ── Production image ──
-FROM node:20-alpine
+FROM node:22-alpine
 
 WORKDIR /app
 
@@ -45,6 +47,8 @@ COPY --from=builder /app/packages/ai/dist packages/ai/dist
 # Stub workspaces that server doesn't use (needed for npm install to not fail)
 COPY --from=builder /app/packages/shared-socket/package.json packages/shared-socket/
 COPY --from=builder /app/packages/shared-store/package.json packages/shared-store/
+COPY --from=builder /app/apps/web/package.json apps/web/
+COPY --from=builder /app/apps/mobile/package.json apps/mobile/
 RUN mkdir -p packages/shared-socket/dist packages/shared-store/dist
 
 # Server itself
@@ -55,7 +59,7 @@ COPY --from=builder /app/apps/server/drizzle apps/server/drizzle
 # Create uploads dir
 RUN mkdir -p apps/server/uploads/avatars
 
-RUN npm install --omit=dev --ignore-scripts
+RUN npm ci --omit=dev --ignore-scripts --workspace=@card-game/server --include-workspace-root
 
 WORKDIR /app/apps/server
 

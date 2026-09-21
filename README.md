@@ -4,10 +4,16 @@ Chess.com-inspired web and mobile platform for playing card games online.
 
 **Live at: [cardarena.vercel.app](https://cardarena.vercel.app)**
 
-## Features
+Redevelopment is underway for **7/6 and 45s / Euchre**, using the existing Euchre
+rules as the baseline. The new hosting target is Railway for both web and server;
+the live website has not been migrated. See the [redevelopment backlog](docs/REDEVELOPMENT.md)
+and [Railway deployment guide](docs/RAILWAY.md). Identity, reconnects, durable rooms,
+score storage, and the responsive redesign remain release blockers.
 
-- **3 Card Games** — Hearts, Spades, Euchre with complete rules
-- **AI Opponents** — 4 difficulty tiers: Beginner, Intermediate, Advanced, Expert (Monte Carlo)
+## Existing features (being rebuilt)
+
+- **Family Games** — Seven-Six and 45s / Euchre are selectable; Hearts, Spades, and Rummy engines are also present
+- **AI Opponents** — Beginner and Casual in the web selector; stronger calibrated levels are future work
 - **Google Sign-In** — OAuth authentication with editable profiles (username, avatar, display name)
 - **Glicko-2 Ratings** — Per-game-type ratings with pairwise decomposition for multiplayer
 - **Leaderboard** — Ranked players by rating for each game
@@ -31,8 +37,8 @@ Chess.com-inspired web and mobile platform for playing card games online.
 | Auth | NextAuth.js v5 (Google OAuth) |
 | AI | Custom (Random, Heuristic, Monte Carlo) |
 | Ratings | Glicko-2 |
-| Testing | Vitest (62 tests) |
-| Hosting | Vercel (web) + Railway (server, Postgres, Redis) |
+| Testing | Vitest (126 tests across engine, AI, and server) |
+| Hosting | Railway target for web, server, Postgres, Redis; existing web deployment remains on Vercel |
 
 ## Project Structure
 

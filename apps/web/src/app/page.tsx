@@ -10,6 +10,15 @@ import { FriendsList } from '@/components/lobby/FriendsList';
 
 const GAME_OPTIONS = [
   {
+    type: GameType.Euchre,
+    name: '45s / Euchre',
+    icon: '♠',
+    color: 'text-emerald-400',
+    description: 'Play the existing Euchre rules: partners, bowers, and five tricks per hand.',
+    players: '4 players',
+    available: true,
+  },
+  {
     type: GameType.SevenSix,
     name: 'Seven-Six',
     icon: '7',
@@ -38,9 +47,7 @@ const TARGET_SCORE_LABELS: Record<GameType, { label: string; description: string
 
 const DIFFICULTY_OPTIONS = [
   { value: AIDifficulty.Beginner, label: 'Beginner', emoji: '😊', desc: 'Random play' },
-  { value: AIDifficulty.Intermediate, label: 'Intermediate', emoji: '🧐', desc: 'Smart play' },
-  { value: AIDifficulty.Advanced, label: 'Advanced', emoji: '😤', desc: 'Card counting' },
-  { value: AIDifficulty.Expert, label: 'Expert', emoji: '🧠', desc: 'Monte Carlo' },
+  { value: AIDifficulty.Intermediate, label: 'Casual', emoji: '🧐', desc: 'Basic strategy' },
 ];
 
 export default function LobbyPage() {
