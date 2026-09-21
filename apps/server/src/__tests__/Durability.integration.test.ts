@@ -2,7 +2,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import Fastify from "fastify";
-import { GameType } from "@card-game/shared-types";
+import { AIDifficulty, GameType } from "@card-game/shared-types";
 import { GameService } from "../services/GameService.js";
 import { RoomService } from "../services/RoomService.js";
 import { GameStateStore } from "../services/GameStateStore.js";
@@ -61,7 +61,7 @@ describe.skipIf(process.env.RUN_DURABILITY_TESTS !== "1")(
       const service = new GameService(new GameStateStore(), async () => {});
       const id = service.createGame(GameType.Euchre, { targetScore: 1 });
       gameIds.push(id);
-      await service.fillWithAI(id);
+      await service.fillWithAI(id, AIDifficulty.Beginner);
       await service.startGame(id);
       await service.executeAITurns(id);
       const room = (await service.getRoom(id))!;
