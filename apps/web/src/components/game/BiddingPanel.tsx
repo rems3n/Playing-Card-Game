@@ -109,24 +109,6 @@ export function BiddingPanel({
     return (
       <section className="bidding-panel" aria-label="Choose your bid">
         <h2>Bidding</h2>
-        <p>
-          Round {gameState.roundNumber + 1} / {gameState.totalRounds} ·{" "}
-          {handSize} cards
-          {gameState.trumpSuit &&
-            ` · Trump ${{ H: "♥", D: "♦", C: "♣", S: "♠" }[gameState.trumpSuit]}`}
-        </p>
-        <div className="bid-summary">
-          {gameState.players.map((player) => (
-            <div key={player.seatIndex}>
-              <span>
-                {player.seatIndex === gameState.mySeat
-                  ? "You"
-                  : player.displayName}
-              </span>
-              <strong>{bids[player.seatIndex] ?? "—"}</strong>
-            </div>
-          ))}
-        </div>
         {isMyTurn ? (
           <form
             onSubmit={(event) => {

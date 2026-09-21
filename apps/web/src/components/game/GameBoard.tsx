@@ -336,27 +336,6 @@ function FamilyTable() {
                 : "Choosing trump"}
             </span>
           </div>
-          {familyGame && (trumpCard || state.trumpSuit) && (
-            <section className="trump-panel" aria-label="Trump for this hand">
-              {trumpCard && (
-                <div className={`face-card ${["H", "D"].includes(trumpCard.suit) ? "red" : ""}`}
-                  role="img" aria-label={`${state.gameType === GameType.SevenSix ? "Trump card" : "Turned-up card"}: ${label(trumpCard)}`}>
-                  <Face card={trumpCard} />
-                </div>
-              )}
-              <div>
-                <p className="eyebrow">{state.trumpSuit ? "TRUMP" : "TURNED-UP CARD"}</p>
-                <h2>{state.trumpSuit ? `${symbols[state.trumpSuit]} ${suits[state.trumpSuit]}` : trumpCard ? label(trumpCard) : "Choosing trump"}</h2>
-                <p>{state.gameType === GameType.SevenSix
-                  ? `${trumpCard ? label(trumpCard) + " · " : ""}Set aside for this hand. No player can hold it.`
-                  : state.phase === GamePhase.Bidding
-                    ? "The turned-up card is picked up by the dealer if its suit is ordered."
-                    : state.trumpCallRound === 1
-                      ? "The dealer picked up the turned-up card and discarded one card."
-                      : "The turned-up card was passed. Trump was chosen in the second bidding round."}</p>
-              </div>
-            </section>
-          )}
           {roundOver && (
             <section className="panel round-result" aria-label="Hand results">
               <p className="eyebrow">HAND {state.roundNumber + 1} COMPLETE</p>
@@ -373,16 +352,6 @@ function FamilyTable() {
                 socket.emit("game:deal_next", { gameId: gameId!, roundNumber: state.roundNumber });
               }}>{pending ? "Dealing…" : "Deal next hand"}</button>
             </section>
-          )}
-          {familyGame && !done && (
-            <label className="auto-deal-control">
-              <input type="checkbox" checked={state.autoDeal ?? false} disabled={pending || !connection.connected}
-                onChange={(event) => {
-                  setPending(true);
-                  socket.emit("game:set_auto_deal", { gameId: gameId!, enabled: event.target.checked });
-                }} />
-              <span>Automatically deal the next hand <small>Applies to this table for the rest of this game. Turn off anytime.</small></span>
-            </label>
           )}
           <div className="felt-table">
             <div className="opponents">
@@ -530,6 +499,37 @@ function FamilyTable() {
             </div>
           </div>}
         </section>
+          {familyGame && (trumpCard || state.trumpSuit) && (
+            <section className="trump-panel" aria-label="Trump for this hand">
+              {trumpCard && (
+                <div className={`face-card ${["H", "D"].includes(trumpCard.suit) ? "red" : ""}`}
+                  role="img" aria-label={`${state.gameType === GameType.SevenSix ? "Trump card" : "Turned-up card"}: ${label(trumpCard)}`}>
+                  <Face card={trumpCard} />
+                </div>
+              )}
+              <div>
+                <p className="eyebrow">{state.trumpSuit ? "TRUMP" : "TURNED-UP CARD"}</p>
+                <h2>{state.trumpSuit ? `${symbols[state.trumpSuit]} ${suits[state.trumpSuit]}` : trumpCard ? label(trumpCard) : "Choosing trump"}</h2>
+                <p>{state.gameType === GameType.SevenSix
+                  ? `${trumpCard ? label(trumpCard) + " · " : ""}Set aside for this hand. No player can hold it.`
+                  : state.phase === GamePhase.Bidding
+                    ? "The turned-up card is picked up by the dealer if its suit is ordered."
+                    : state.trumpCallRound === 1
+                      ? "The dealer picked up the turned-up card and discarded one card."
+                      : "The turned-up card was passed. Trump was chosen in the second bidding round."}</p>
+              </div>
+            </section>
+          )}
+          {familyGame && !done && (
+            <label className="auto-deal-control">
+              <input type="checkbox" checked={state.autoDeal ?? false} disabled={pending || !connection.connected}
+                onChange={(event) => {
+                  setPending(true);
+                  socket.emit("game:set_auto_deal", { gameId: gameId!, enabled: event.target.checked });
+                }} />
+              <span>Automatically deal the next hand <small>Applies to this table for the rest of this game. Turn off anytime.</small></span>
+            </label>
+          )}
         <aside className="table-aside">
           <section className="panel score-panel">
             <div className="score-heading">
