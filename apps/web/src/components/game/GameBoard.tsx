@@ -106,6 +106,7 @@ function FamilyTable() {
   const [rules, setRules] = useState(false);
   const [leave, setLeave] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [saveStatus, setSaveStatus] = useState<boolean | undefined>();
   const [disconnected, setDisconnected] = useState<{
@@ -116,6 +117,7 @@ function FamilyTable() {
     setSaveStatus(undefined);
     setSelected(null);
     setReviewOpen(false);
+    setMenuOpen(false);
   }, [gameId]);
   useEffect(() => {
     const update = (next: NonNullable<typeof state>) => {
@@ -215,6 +217,65 @@ function FamilyTable() {
   const winners = state.players.filter((p) => scores[p.seatIndex] === best);
   const handBest = Math.max(...state.roundScores);
   const handWinners = state.players.filter((p) => state.roundScores[p.seatIndex] === handBest);
+  const scorePanel = (
+<section className="panel score-panel">
+            <div className="score-heading">
+              <h2>Scoreboard</h2>
+              <span>
+                {state.gameType === GameType.Euchre
+                  ? `First to ${state.config.targetScore}`
+                  : "Exact bid: 10 + tricks"}
+              </span>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Player</th>
+                  <th>Bid</th>
+                  <th>Tricks</th>
+                  <th>Score</th>
+                </tr>
+              </thead>
+              <tbody>
+                {state.players.map((p) => (
+                  <tr
+                    key={p.seatIndex}
+                    className={p.seatIndex === state.mySeat ? "my-row" : ""}
+                  >
+                    <th>
+                      {p.displayName}
+                      {p.seatIndex === state.mySeat && <small> You</small>}
+                      {state.gameType === GameType.Euchre && (
+                        <small> · Team {(p.seatIndex % 2) + 1}</small>
+                      )}
+                    </th>
+                    <td>
+                      {state.bids?.[p.seatIndex] === -1
+                        ? "Pass"
+                        : (state.bids?.[p.seatIndex] ?? "—")}
+                    </td>
+                    <td>{p.tricksWon}</td>
+                    <td>
+                      <strong>{scores[p.seatIndex]}</strong>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+  );
+  const autoDealControl = (
+familyGame && !done && (
+            <label className="auto-deal-control">
+              <input type="checkbox" checked={state.autoDeal ?? false} disabled={pending || !connection.connected}
+                onChange={(event) => {
+                  setPending(true);
+                  socket.emit("game:set_auto_deal", { gameId: gameId!, enabled: event.target.checked });
+                }} />
+              <span>Automatically deal the next hand <small>Applies to this table for the rest of this game. Turn off anytime.</small></span>
+            </label>
+          )
+  );
   function play() {
     if (!selected || !gameId || !myTurn || pending || !legal(selected)) return;
     setPending(true);
@@ -225,6 +286,7 @@ function FamilyTable() {
       className="game-page"
       data-phase={state.phase}
       data-round={state.roundNumber}
+      data-players={state.players.length}
     >
       <div className="game-heading">
         <div>
@@ -239,12 +301,13 @@ function FamilyTable() {
           >
             Last trick
           </button>
-          <button className="button secondary" onClick={() => setRules(true)}>
+          <button className="button secondary desktop-table-action" onClick={() => setRules(true)}>
             Rules
           </button>
-          <button className="button secondary" onClick={() => setLeave(true)}>
+          <button className="button secondary desktop-table-action" onClick={() => setLeave(true)}>
             Leave table
           </button>
+          <button className="button secondary mobile-table-action" onClick={() => setMenuOpen(true)} aria-label="Table menu: scores and settings">Table</button>
         </div>
       </div>
       {!connection.connected && (
@@ -520,62 +583,9 @@ function FamilyTable() {
               </div>
             </section>
           )}
-          {familyGame && !done && (
-            <label className="auto-deal-control">
-              <input type="checkbox" checked={state.autoDeal ?? false} disabled={pending || !connection.connected}
-                onChange={(event) => {
-                  setPending(true);
-                  socket.emit("game:set_auto_deal", { gameId: gameId!, enabled: event.target.checked });
-                }} />
-              <span>Automatically deal the next hand <small>Applies to this table for the rest of this game. Turn off anytime.</small></span>
-            </label>
-          )}
+        {autoDealControl}
         <aside className="table-aside">
-          <section className="panel score-panel">
-            <div className="score-heading">
-              <h2>Scoreboard</h2>
-              <span>
-                {state.gameType === GameType.Euchre
-                  ? `First to ${state.config.targetScore}`
-                  : "Exact bid: 10 + tricks"}
-              </span>
-            </div>
-            <table>
-              <thead>
-                <tr>
-                  <th>Player</th>
-                  <th>Bid</th>
-                  <th>Tricks</th>
-                  <th>Score</th>
-                </tr>
-              </thead>
-              <tbody>
-                {state.players.map((p) => (
-                  <tr
-                    key={p.seatIndex}
-                    className={p.seatIndex === state.mySeat ? "my-row" : ""}
-                  >
-                    <th>
-                      {p.displayName}
-                      {p.seatIndex === state.mySeat && <small> You</small>}
-                      {state.gameType === GameType.Euchre && (
-                        <small> · Team {(p.seatIndex % 2) + 1}</small>
-                      )}
-                    </th>
-                    <td>
-                      {state.bids?.[p.seatIndex] === -1
-                        ? "Pass"
-                        : (state.bids?.[p.seatIndex] ?? "—")}
-                    </td>
-                    <td>{p.tricksWon}</td>
-                    <td>
-                      <strong>{scores[p.seatIndex]}</strong>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
+          {scorePanel}
           <details className="panel chat-details">
             <summary>Table chat</summary>
             <ChatPanel />
@@ -587,6 +597,18 @@ function FamilyTable() {
           </p>
         </aside>
       </div>
+      <Dialog open={menuOpen} onClose={() => setMenuOpen(false)} titleId="table-menu-title">
+        {menuOpen && <section className="panel table-menu-panel">
+          <div className="table-menu-heading"><h2 id="table-menu-title">Table</h2><button className="button secondary" autoFocus onClick={() => setMenuOpen(false)}>Back to game</button></div>
+          {scorePanel}
+          {autoDealControl}
+          <div className="table-menu-actions">
+            <button className="button secondary" onClick={() => { setMenuOpen(false); setRules(true); }}>Rules</button>
+            <button className="button secondary" onClick={() => { setMenuOpen(false); setLeave(true); }}>Leave table</button>
+          </div>
+          <details className="chat-details"><summary>Table chat</summary><ChatPanel /></details>
+        </section>}
+      </Dialog>
       <Dialog
         open={reviewOpen}
         onClose={() => setReviewOpen(false)}
