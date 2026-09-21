@@ -46,6 +46,9 @@ export class SevenSixEngine extends GameEngine {
 
   constructor(gameId: string, config?: Partial<GameConfig>) {
     const numPlayers = config?.maxPlayers ?? 4;
+    if (!Number.isInteger(numPlayers) || numPlayers < 2 || numPlayers > 7) {
+      throw new Error('Seven-Six requires 2-7 players');
+    }
     super(gameId, {
       gameType: GameType.SevenSix,
       maxPlayers: numPlayers,
@@ -204,7 +207,7 @@ export class SevenSixEngine extends GameEngine {
 
     const handSize = this.getHandSize();
 
-    if (bid < 0 || bid > handSize) {
+    if (!Number.isInteger(bid) || bid < 0 || bid > handSize) {
       throw new Error(`Bid must be 0-${handSize}`);
     }
 

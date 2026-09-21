@@ -32,7 +32,13 @@ export interface GameRoom {
 
 export class GameService {
   private games = new Map<string, GameRoom>(); // in-memory cache
-  private store = new GameStateStore();
+  private aiRuns = new Map<string, Promise<void>>();
+  private loads = new Map<string, Promise<GameRoom | undefined>>();
+
+  constructor(
+    private store: Pick<GameStateStore, 'save' | 'load' | 'remove'> = new GameStateStore(),
+    private delay: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  ) {}
 
   // ── Persistence helpers ──
 
@@ -71,11 +77,16 @@ export class GameService {
     const cached = this.games.get(gameId);
     if (cached) return cached;
 
-    // Try Redis
-    const data = await this.store.load(gameId);
-    if (!data) return undefined;
-
-    return this.restoreFromData(data);
+    // Reconnecting clients must share one restored engine instance.
+    const existingLoad = this.loads.get(gameId);
+    if (existingLoad) return existingLoad;
+    const pending = this.store.load(gameId).then((data) => data ? this.restoreFromData(data) : undefined);
+    this.loads.set(gameId, pending);
+    try {
+      return await pending;
+    } finally {
+      this.loads.delete(gameId);
+    }
   }
 
   /** Reconstruct a GameRoom from serialized data. */
@@ -199,17 +210,22 @@ export class GameService {
           if (oldSid) room.socketSeats.delete(oldSid);
           room.playerSockets.set(seat, socketId);
           room.socketSeats.set(socketId, seat);
+          state.players[seat].isConnected = true;
           await this.persist(gameId);
           return seat;
         }
       }
     }
 
-    // Find first seat not occupied by a human
+    if (room.engine.getState().phase !== GamePhase.Waiting) {
+      throw new Error('This game has already started; only existing players can rejoin');
+    }
+
+    // Find first seat not occupied by a human or bot.
     const maxSeats = room.engine.getState().config.maxPlayers;
     let seat = -1;
     for (let i = 0; i < maxSeats; i++) {
-      if (!room.playerSockets.has(i)) {
+      if (!room.playerSockets.has(i) && !room.aiPlayers.has(i)) {
         seat = i;
         break;
       }
@@ -353,6 +369,9 @@ export class GameService {
     if (!room) return;
 
     const player = room.engine.getState().players[seatIndex];
+    if (!Number.isInteger(seatIndex) || !player) throw new Error('Invalid seat');
+    if (player.isAI) return;
+    if (player.isConnected) throw new Error('Player is still connected');
     const ai = createAIPlayer(AIDifficulty.Intermediate, player.displayName + ' (AI)');
     room.aiPlayers.set(seatIndex, ai);
     room.engine.setPlayer(seatIndex, null, ai.displayName, true);
@@ -375,11 +394,39 @@ export class GameService {
   getConnectedHumanCount(gameId: string): number {
     const room = this.games.get(gameId);
     if (!room) return 0;
-    return room.playerSockets.size;
+    return [...room.playerSockets.keys()].filter((seat) => room.engine.getState().players[seat].isConnected).length;
   }
 
-  /** Execute AI turns with persistence after each action. */
-  async executeAITurns(
+  /** One scheduler per game, continuing across bidding and round boundaries. */
+  executeAITurns(
+    gameId: string,
+    onCardPlayed?: (seatIndex: number, card: Card) => void,
+  ): Promise<void> {
+    const running = this.aiRuns.get(gameId);
+    if (running) return running;
+    const pending = this.runAIUntilHumanTurn(gameId, onCardPlayed).finally(() => this.aiRuns.delete(gameId));
+    this.aiRuns.set(gameId, pending);
+    return pending;
+  }
+
+  private async runAIUntilHumanTurn(gameId: string, onCardPlayed?: (seatIndex: number, card: Card) => void): Promise<void> {
+    const room = await this.ensureLoaded(gameId);
+    if (!room) return;
+    while (this.games.get(gameId) === room) {
+      const eventCount = room.engine.getEvents().length;
+      await this.executeAIPhase(gameId, onCardPlayed);
+      if (room.engine.getEvents().length === eventCount || room.engine.getState().phase === GamePhase.GameOver) return;
+    }
+  }
+
+  private async pauseForAI(gameId: string, room: GameRoom, seat: number, ms: number): Promise<boolean> {
+    const ai = room.aiPlayers.get(seat);
+    const eventCount = room.engine.getEvents().length;
+    await this.delay(ms);
+    return this.games.get(gameId) === room && room.aiPlayers.get(seat) === ai && room.engine.getEvents().length === eventCount;
+  }
+
+  private async executeAIPhase(
     gameId: string,
     onCardPlayed?: (seatIndex: number, card: Card) => void,
   ): Promise<void> {
@@ -394,7 +441,7 @@ export class GameService {
         if (!room.engine.hasPlayerPassed(seat)) {
           const visibleState = room.engine.getVisibleState(seat);
           const cards = ai.choosePassCards(visibleState, 3);
-          await this.delay(300);
+          if (!await this.pauseForAI(gameId, room, seat, 300)) return;
           room.engine.passCards(seat, cards);
         }
       }
@@ -410,7 +457,7 @@ export class GameService {
       while (ai && room.engine.getState().phase === GamePhase.Bidding) {
         const visibleState = room.engine.getVisibleState(currentSeat);
         const bid = ai.chooseBid(visibleState);
-        await this.delay(500);
+        if (!await this.pauseForAI(gameId, room, currentSeat, 500)) return;
         room.engine.placeBid(currentSeat, typeof bid === 'number' ? bid : 2);
 
         const newState = room.engine.getState();
@@ -433,7 +480,7 @@ export class GameService {
         const trumpSuit = ssEngine.getState().trumpSuit!;
         const legalBids = ssEngine.getLegalBids(currentSeat);
         const bid = sevenSixBid(hand, trumpSuit, legalBids);
-        await this.delay(500);
+        if (!await this.pauseForAI(gameId, room, currentSeat, 500)) return;
         ssEngine.placeBid(currentSeat, bid);
 
         const newState = ssEngine.getState();
@@ -453,22 +500,18 @@ export class GameService {
       while (ai && room.engine.getState().phase === GamePhase.Bidding) {
         const hand = room.engine.getState().players[currentSeat].hand;
         const turnedUp = room.engine.getTurnedUpCard();
-        await this.delay(500);
-
-        if (turnedUp) {
-          if (shouldCallTrump(hand, turnedUp.suit)) {
-            room.engine.callTrump(currentSeat, turnedUp.suit);
-          } else {
-            const bestSuit = chooseTrumpSuit(hand, turnedUp.suit);
-            if (bestSuit) {
-              room.engine.callTrump(currentSeat, bestSuit);
-            } else {
-              room.engine.callTrump(currentSeat, 'pass');
-            }
-          }
+        const legalCalls = room.engine.getLegalTrumpCalls(currentSeat);
+        if (!turnedUp || legalCalls.length === 0) return;
+        let call: Suit | 'pass' = 'pass';
+        if (legalCalls.includes(turnedUp.suit)) {
+          if (shouldCallTrump(hand, turnedUp.suit)) call = turnedUp.suit;
         } else {
-          room.engine.callTrump(currentSeat, 'pass');
+          call = chooseTrumpSuit(hand, turnedUp.suit) ?? 'pass';
         }
+        // A stuck dealer must choose one of the three remaining suits.
+        if (!legalCalls.includes(call)) call = legalCalls[0];
+        if (!await this.pauseForAI(gameId, room, currentSeat, 500)) return;
+        room.engine.callTrump(currentSeat, call);
 
         const newState = room.engine.getState();
         if (newState.phase !== GamePhase.Bidding) break;
@@ -542,7 +585,7 @@ export class GameService {
       const visibleState = room.engine.getVisibleState(currentSeat);
       const card = ai.chooseCard(visibleState);
 
-      await this.delay(1500 + Math.random() * 1000);
+      if (!await this.pauseForAI(gameId, room, currentSeat, 1500 + Math.random() * 1000)) return;
       room.engine.playCard(currentSeat, card);
       await this.persist(gameId);
 
@@ -554,10 +597,6 @@ export class GameService {
       currentSeat = newState.currentPlayerSeat;
       ai = room.aiPlayers.get(currentSeat);
     }
-  }
-
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   async removeGame(gameId: string): Promise<void> {

@@ -33,6 +33,7 @@ interface WaitingRoom {
   id: string;
   gameType: GameType;
   hostSocketId: string;
+  starting?: boolean;
   hostDisplayName: string;
   players: Array<{ socketId: string; displayName: string; userId: string | null }>;
   maxPlayers: number;
@@ -314,7 +315,7 @@ export function setupGameHandlers(
       waitingRooms.set(roomId, room);
       await socket.join(`room:${roomId}`);
       socket.emit('room:created', { roomId });
-      io.to(`room:${roomId}`).emit('room:update', toRoomState(room));
+      broadcastRoomState(io, room);
     });
 
     // ── Join a waiting room ──
@@ -324,19 +325,24 @@ export function setupGameHandlers(
         socket.emit('room:error', { message: 'Room not found' });
         return;
       }
+      if (room.players.some((p) => p.socketId === socket.id)) {
+        // Already in room
+        socket.emit('room:update', toRoomState(room, socket.id));
+        return;
+      }
+
       if (room.players.length >= room.maxPlayers) {
         socket.emit('room:error', { message: 'Room is full' });
         return;
       }
-      if (room.players.some((p) => p.socketId === socket.id)) {
-        // Already in room
-        socket.emit('room:update', toRoomState(room));
+      if (room.starting) {
+        socket.emit('room:error', { message: 'Game is starting' });
         return;
       }
 
       room.players.push({ socketId: socket.id, displayName, userId });
       await socket.join(`room:${room.id}`);
-      io.to(`room:${room.id}`).emit('room:update', toRoomState(room));
+      broadcastRoomState(io, room);
     });
 
     // ── Leave a waiting room ──
@@ -355,7 +361,7 @@ export function setupGameHandlers(
           room.hostSocketId = room.players[0].socketId;
           room.hostDisplayName = room.players[0].displayName;
         }
-        io.to(`room:${room.id}`).emit('room:update', toRoomState(room));
+        broadcastRoomState(io, room);
       }
     });
 
@@ -375,43 +381,59 @@ export function setupGameHandlers(
         return;
       }
 
-      // Create the actual game
-      const gameId = gameService.createGame(room.gameType, room.config);
+      if (room.starting) return;
+      room.starting = true;
+      let gameId: string | undefined;
+      try {
+        // Create the actual game
+        gameId = gameService.createGame(room.gameType, room.config);
 
-      for (const player of room.players) {
-        await gameService.joinGame(gameId, player.socketId, player.displayName, player.userId ?? undefined);
-        const playerSocket = io.sockets.sockets.get(player.socketId);
-        if (playerSocket) {
-          await playerSocket.join(gameId);
-        }
-      }
-
-      // Fill remaining seats with AI
-      if (room.players.length < room.maxPlayers) {
-        await gameService.fillWithAI(gameId, AIDifficulty.Intermediate);
-      }
-
-      await gameService.startGame(gameId);
-
-      // Notify all players
-      io.to(`room:${room.id}`).emit('room:started', { gameId });
-
-      // Send game state to each player
-      for (const player of room.players) {
-        const seat = await gameService.getSeatForSocket(gameId, player.socketId);
-        if (seat !== undefined) {
+        for (const player of room.players) {
+          await gameService.joinGame(gameId, player.socketId, player.displayName, player.userId ?? undefined);
           const playerSocket = io.sockets.sockets.get(player.socketId);
           if (playerSocket) {
-            playerSocket.emit('game:state', await gameService.getVisibleState(gameId, seat));
+            await playerSocket.join(gameId);
           }
         }
+
+        // Fill remaining seats with AI
+        if (room.players.length < room.maxPlayers) {
+          await gameService.fillWithAI(gameId, AIDifficulty.Intermediate);
+        }
+
+        await gameService.startGame(gameId);
+
+        // Notify all players
+        io.to(`room:${room.id}`).emit('room:started', { gameId });
+
+        // Send game state to each player
+        for (const player of room.players) {
+          const seat = await gameService.getSeatForSocket(gameId, player.socketId);
+          if (seat !== undefined) {
+            const playerSocket = io.sockets.sockets.get(player.socketId);
+            if (playerSocket) {
+              playerSocket.emit('game:state', await gameService.getVisibleState(gameId, seat));
+            }
+          }
+        }
+
+        // Clean up room
+        waitingRooms.delete(room.id);
+
+        // A bot failure must not roll back a game players have already entered.
+        await handleAITurns(io, gameService, gameId).catch((err) => {
+          io.to(gameId!).emit('game:error', { code: 'AI_FAILED', message: err instanceof Error ? err.message : 'Bot turn failed' });
+        });
+      } catch (err) {
+        if (gameId) {
+          for (const player of room.players) io.sockets.sockets.get(player.socketId)?.leave(gameId);
+          await gameService.removeGame(gameId).catch(() => {});
+        }
+        socket.emit('room:error', { message: err instanceof Error ? err.message : 'Could not start game' });
+      } finally {
+        room.starting = false;
       }
 
-      // Clean up room
-      waitingRooms.delete(room.id);
-
-      // Handle AI turns
-      await handleAITurns(io, gameService, gameId);
     });
 
     // ── Join an existing game ──
@@ -455,7 +477,16 @@ export function setupGameHandlers(
     // ── Replace disconnected player with AI ──
     socket.on('game:replace_with_ai', async (data) => {
       const { gameId, seatIndex } = data;
-      await gameService.replaceWithAI(gameId, seatIndex);
+      if (await gameService.getSeatForSocket(gameId, socket.id) === undefined) {
+        socket.emit('game:error', { code: 'NOT_IN_GAME', message: 'You are not in this game' });
+        return;
+      }
+      try {
+        await gameService.replaceWithAI(gameId, seatIndex);
+      } catch (err) {
+        socket.emit('game:error', { code: 'REPLACE_FAILED', message: err instanceof Error ? err.message : 'Could not replace player' });
+        return;
+      }
 
       // Cancel the timer
       const timerKey = `${gameId}:${seatIndex}`;
@@ -469,7 +500,7 @@ export function setupGameHandlers(
       const room = await gameService.getRoom(gameId);
       if (room) {
         const state = room.engine.getState();
-        if (state.phase === GamePhase.Playing && room.aiPlayers.has(state.currentPlayerSeat)) {
+        if (room.aiPlayers.has(state.currentPlayerSeat)) {
           await handleAITurns(io, gameService, gameId);
         }
       }
@@ -480,6 +511,10 @@ export function setupGameHandlers(
       const { gameId } = data;
       const room = await gameService.getRoom(gameId);
       if (!room) return;
+      if (await gameService.getSeatForSocket(gameId, socket.id) === undefined) {
+        socket.emit('game:error', { code: 'NOT_IN_GAME', message: 'You are not in this game' });
+        return;
+      }
 
       io.to(gameId).emit('game:over', {
         finalScores: room.engine.getState().scores,
@@ -823,7 +858,7 @@ export function setupGameHandlers(
               room.hostSocketId = room.players[0].socketId;
               room.hostDisplayName = room.players[0].displayName;
             }
-            io.to(`room:${roomId}`).emit('room:update', toRoomState(room));
+            broadcastRoomState(io, room);
           }
         }
       }
@@ -831,11 +866,12 @@ export function setupGameHandlers(
   });
 }
 
-function toRoomState(room: WaitingRoom): WaitingRoomState {
+function toRoomState(room: WaitingRoom, socketId: string): WaitingRoomState {
   return {
     roomId: room.id,
     gameType: room.gameType,
     host: room.hostDisplayName,
+    mySeat: room.players.findIndex((player) => player.socketId === socketId),
     players: room.players.map((p, i) => ({
       displayName: p.displayName,
       avatarUrl: null,
@@ -846,6 +882,12 @@ function toRoomState(room: WaitingRoom): WaitingRoomState {
     fillWithAI: room.players.length < room.maxPlayers,
     config: room.config,
   };
+}
+
+function broadcastRoomState(io: GameServer, room: WaitingRoom): void {
+  for (const player of room.players) {
+    io.to(player.socketId).emit('room:update', toRoomState(room, player.socketId));
+  }
 }
 
 function startDisconnectTimer(

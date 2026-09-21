@@ -1,0 +1,25 @@
+name: Validate
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - run: npx turbo run build --filter=@card-game/server --filter=@card-game/web
+        env:
+          NEXT_PUBLIC_SERVER_URL: https://api.example.com
+      - name: Verify Railway web image
+        run: docker build -f Dockerfile.web --build-arg NEXT_PUBLIC_SERVER_URL=https://api.example.com -t cardarena-web .
+      - name: Verify Railway server image
+        run: docker build -f Dockerfile -t cardarena-server .

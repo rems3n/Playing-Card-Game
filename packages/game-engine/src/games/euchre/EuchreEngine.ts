@@ -5,6 +5,7 @@ import {
   type PlayedCard,
   type PlayerState,
   type TrickResult,
+  type VisibleGameState,
   GamePhase,
   GameEventType,
   GameType,
@@ -39,6 +40,9 @@ export class EuchreEngine extends GameEngine {
   private turnedUpCard: Card | null = null;
 
   constructor(gameId: string, config?: Partial<GameConfig>) {
+    if (config?.maxPlayers !== undefined && config.maxPlayers !== NUM_PLAYERS) {
+      throw new Error('Euchre requires exactly 4 players');
+    }
     super(gameId, {
       gameType: GameType.Euchre,
       maxPlayers: NUM_PLAYERS,
@@ -154,6 +158,9 @@ export class EuchreEngine extends GameEngine {
     const dealer = this.state.roundNumber % NUM_PLAYERS;
 
     if (suit === 'pass') {
+      if (this.trumpCallRound === 2 && seatIndex === dealer) {
+        throw new Error('Dealer must choose trump in round 2');
+      }
       this.state.bids![seatIndex] = -1; // pass marker
       this.addEvent(GameEventType.BidPlaced, seatIndex, { bid: 'pass' });
 
@@ -176,6 +183,9 @@ export class EuchreEngine extends GameEngine {
     }
 
     // Validate suit choice
+    if (!Object.values(Suit).includes(suit)) {
+      throw new Error('Invalid trump suit');
+    }
     if (this.trumpCallRound === 1 && suit !== this.turnedUpCard!.suit) {
       throw new Error('In round 1, you can only order up the turned card suit or pass');
     }
@@ -211,11 +221,18 @@ export class EuchreEngine extends GameEngine {
    * Must be called after callTrump, before play begins.
    */
   goAlone(seatIndex: number): void {
+    if (this.state.phase !== GamePhase.Playing || this.state.trickNumber !== 0 || this.state.currentTrick.length > 0) {
+      throw new Error('Going alone must be declared before the first card is played');
+    }
     if (seatIndex !== this.maker) {
       throw new Error('Only the maker can go alone');
     }
     this.goingAlone = true;
     this.alonePlayer = seatIndex;
+    if (this.state.currentPlayerSeat === this.getPartner(seatIndex)) {
+      this.state.currentPlayerSeat = (this.state.currentPlayerSeat + 1) % NUM_PLAYERS;
+      this.state.leadSeat = this.state.currentPlayerSeat;
+    }
   }
 
   private beginPlaying(): void {
@@ -351,8 +368,7 @@ export class EuchreEngine extends GameEngine {
     }
 
     const winningSeat = trick[winnerIdx].seatIndex;
-    this.state.players[winningSeat].tricksWon++;
-    // Don't add to roundScores here — handled in completeTrick via parent
+    // The base engine awards the trick exactly once.
 
     return {
       winningSeat,
@@ -407,6 +423,24 @@ export class EuchreEngine extends GameEngine {
 
   getTurnedUpCard(): Card | null {
     return this.turnedUpCard;
+  }
+
+  getLegalTrumpCalls(seatIndex: number): Array<Suit | 'pass'> {
+    if (this.state.phase !== GamePhase.Bidding || seatIndex !== this.state.currentPlayerSeat || !this.turnedUpCard) return [];
+    if (this.trumpCallRound === 1) return [this.turnedUpCard.suit, 'pass'];
+    const calls: Array<Suit | 'pass'> = Object.values(Suit).filter((suit) => suit !== this.turnedUpCard!.suit);
+    if (seatIndex !== this.state.roundNumber % NUM_PLAYERS) calls.push('pass');
+    return calls;
+  }
+
+  override getVisibleState(seatIndex: number): VisibleGameState {
+    return {
+      ...super.getVisibleState(seatIndex),
+      dealerSeat: this.state.roundNumber % NUM_PLAYERS,
+      turnedUpCard: this.turnedUpCard ?? undefined,
+      trumpCallRound: this.trumpCallRound,
+      legalTrumpCalls: this.getLegalTrumpCalls(seatIndex),
+    };
   }
 
   getMaker(): number {

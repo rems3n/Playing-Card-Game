@@ -20,6 +20,7 @@ export interface WaitingRoomState {
   roomId: string;
   gameType: GameType;
   host: string; // display name
+  mySeat?: number; // personalized by the server; display names are not identities
   players: WaitingRoomPlayer[];
   maxPlayers: number;
   fillWithAI: boolean;

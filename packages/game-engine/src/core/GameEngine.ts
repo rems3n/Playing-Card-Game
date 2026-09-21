@@ -85,7 +85,7 @@ export abstract class GameEngine {
     });
 
     // Check if round is over (all cards played)
-    if (this.state.players[0].hand.length === 0) {
+    if (this.getActivePlayers().every((player) => player.hand.length === 0)) {
       this.endRound();
     } else {
       // Next trick — winner leads

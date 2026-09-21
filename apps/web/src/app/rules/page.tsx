@@ -5,6 +5,16 @@ import { RulesModal } from '@/components/RulesModal';
 
 const GAMES = [
   {
+    type: 'euchre' as const,
+    title: '45s / Euchre',
+    tagline: 'Play with a partner and choose your trump',
+    players: '4 players',
+    difficulty: 'Partnership game',
+    color: 'var(--accent-green)',
+    icon: '♠',
+    summary: 'Uses the existing Euchre rules: a 24-card deck, five tricks per hand, bowers, and a target of 10 points. Seats opposite each other are partners.',
+  },
+  {
     type: 'seven-six' as const,
     title: 'Seven-Six',
     tagline: 'Bid smart, hit your number, climb the ranks',
@@ -17,7 +27,7 @@ const GAMES = [
 ];
 
 export default function RulesPage() {
-  const [activeGame, setActiveGame] = useState<'seven-six' | null>(null);
+  const [activeGame, setActiveGame] = useState<'seven-six' | 'euchre' | null>(null);
 
   return (
     <div className="max-w-3xl mx-auto p-6">
