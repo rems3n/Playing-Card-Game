@@ -11,7 +11,8 @@ legacy Hearts/Spades/Rummy screens, and stronger AI are separate workstreams.
 | +/− bidding has no submit action | The stepper changes local state; only number tiles sent a bid | Stepper and number tiles select; a labeled Submit bid button confirms. Component tests exercise mouse and Enter, bounds, restricted dealer bid, pending requests and other-player turns. |
 | Last card disappears when a bot finishes a trick | Engine clears the trick synchronously; bot broadcast skipped the human-only delay | GameService preserves a personalized completed-trick view and holds progression for 3.5 seconds for both human/bot endings. Tests cover every trick, round transition, final-game transition, and restore during review. |
 | Winner is not identifiable | Active family table ignores old trick events | The completed state includes winner and all cards; gold card/player highlight, winner text, reduced-motion support and Last trick dialog. |
-| Table cards become square; suit is off center | A 72px flex basis acts on height inside a column; fixed suit offsets | Non-shrinking, explicit portrait dimensions and 50% centering. Live layout inspection is needed in addition to component tests. |
+| Table cards become square; suit is off center | A 72px flex basis acts on height inside a column; fixed suit offsets | Non-shrinking, explicit portrait dimensions and 50% centering. Live desktop DOM measurements confirmed 72 × 104px cards with centered suits. |
+| Last trick dialog overflows its container | Content width exceeded the native dialog width | Fit the content to its dialog, with a scroll limit for short screens. |
 | Number by player disagrees with trick column | It was cumulative score without a label | Each player shows labeled tricks and points, including on small screens. Tests compare rendered counters. |
 | Euchre displays -1 | Internal pass sentinel is rendered directly | Display Pass. |
 | A malformed bid silently becomes zero | Socket handler coerced a non-number to 0 | Reject non-integer/non-number submissions; engine validates bounds and dealer restriction. |
@@ -46,6 +47,15 @@ legacy Hearts/Spades/Rummy screens, and stronger AI are separate workstreams.
 No finite simulation suite checks every possible game or proves visual quality.
 The engine simulations use accelerated execution. Browser tests must separately
 verify the real-time pause, portrait card shape, centered symbols, focus and layout.
+
+## Deployed desktop acceptance
+
+On the Railway preview, selected a bid with +/− and submitted it using the new
+Submit button, then played through multiple tricks against a bot. Confirmed
+completed cards and winner feedback appear, own-seat trick counts agree with the
+scoreboard, and Last trick retains the cards and winner after play resumes.
+The automated timer regression verifies the 3.5-second hold. These checks do not
+constitute real phone, multi-person network, or native-app acceptance.
 
 ## Remaining release work identified by review
 

@@ -1630,8 +1630,9 @@ input::placeholder {
   padding: 8px;
 }
 .last-trick-dialog {
-  max-width: 700px;
-  width: min(700px, calc(100vw - 32px));
+  width: 100%;
+  max-height: 85dvh;
+  overflow: auto;
   text-align: center;
   padding: 24px;
 }
