@@ -4,8 +4,9 @@ Railway is the deployment target for both the Next.js website and the long-runni
 Fastify/Socket.IO game server. Vercel is optional and is not required by this design.
 The existing backend is already documented in this repository as running on Railway.
 
-This branch prepares deployment artifacts. It has not migrated the live website.
-Use an isolated staging environment until the release blockers in
+The redesign preview runs in the separate `cardarena-preview` Railway project.
+The original `cardarena` production project has not been migrated.
+Use the isolated preview until the release blockers in
 [REDEVELOPMENT.md](REDEVELOPMENT.md) are complete.
 
 ## Services
@@ -16,7 +17,6 @@ for both application services: their builds need the shared packages and lockfil
 
 | Setting                             | Web                                      | Game server                         |
 | ----------------------------------- | ---------------------------------------- | ----------------------------------- |
-| Config file path (service settings) | `/railway.web.toml`                      | `/railway.server.toml`              |
 | Dockerfile                          | `Dockerfile.web`                         | `Dockerfile`                        |
 | Start command                       | Image default: `node apps/web/server.js` | Image default: `node dist/index.js` |
 | Health path                         | `/api/health`                            | `/health`                           |
@@ -28,10 +28,13 @@ remain a single replica while rooms, disconnect timers, and match proposals stil
 use process memory. Redis snapshots alone do not coordinate multiple game servers.
 Disable service sleeping for the game server; active tables need a persistent process.
 
-Railway supports [custom Dockerfiles and build arguments](https://docs.railway.com/builds/dockerfiles)
-and [deployment configuration in source control](https://docs.railway.com/config-as-code/reference).
-Select the config file explicitly for each service so the web service does not
-accidentally build the default server Dockerfile.
+Railway supports [custom Dockerfiles and build arguments](https://docs.railway.com/builds/dockerfiles).
+Set the Dockerfile path explicitly in each service's build settings so the web
+service does not accidentally build the default server Dockerfile. On September
+21, 2026, Railway's API rejected setting a TOML config path as deprecated. The
+preview therefore uses the dashboard/API settings in the table above, a 120-second
+health-check timeout, and the ON_FAILURE restart policy with three retries. The
+TOML files remain as legacy references; do not rely on them being applied.
 
 ## Variables
 
@@ -59,6 +62,8 @@ Only the public backend URL is intentionally baked into the browser bundle.
 
 Register `https://<web-domain>/api/auth/callback/google` as the authorized Google
 OAuth redirect URI. Maintain the old redirect until the cutover is verified.
+The preview currently uses guest play; Google OAuth credentials are not configured.
+The sign-in page only offers Google when the provider is enabled.
 
 ## Storage and database changes
 
