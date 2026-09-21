@@ -15,6 +15,13 @@
       "when": 1774543065984,
       "tag": "0001_peaceful_jack_power",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790010676496,
+      "tag": "0002_fine_the_stranger",
+      "breakpoints": true
     }
   ]
 }

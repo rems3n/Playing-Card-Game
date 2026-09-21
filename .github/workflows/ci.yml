@@ -8,6 +8,26 @@ permissions:
 jobs:
   test-and-build:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: cardgame
+          POSTGRES_PASSWORD: cardgame_test
+          POSTGRES_DB: cardgame_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U cardgame -d cardgame_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://cardgame:cardgame_test@localhost:5432/cardgame_test
+      REDIS_URL: redis://localhost:6379
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -15,7 +35,14 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci --ignore-scripts
+      - run: npm run db:migrate --workspace=@card-game/server
+      - run: npm audit --omit=dev --workspace=@card-game/server --workspace=@card-game/web --audit-level=high
       - run: npm test
+      - run: npx tsc --noEmit -p apps/mobile/tsconfig.json
+      - name: Verify database rollback and Redis recovery
+        run: npm run test --workspace=@card-game/server -- src/__tests__/Durability.integration.test.ts
+        env:
+          RUN_DURABILITY_TESTS: "1"
       - run: npx turbo run build --filter=@card-game/server --filter=@card-game/web
         env:
           NEXT_PUBLIC_SERVER_URL: https://api.example.com

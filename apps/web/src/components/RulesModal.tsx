@@ -1,236 +1,241 @@
-'use client';
+"use client";
 
-import { useEffect, useRef } from 'react';
+import { Dialog } from "./Dialog";
 
 interface RulesModalProps {
-  gameType: 'hearts' | 'spades' | 'euchre' | 'rummy' | 'seven-six';
+  gameType: "hearts" | "spades" | "euchre" | "rummy" | "seven-six";
   open: boolean;
   onClose: () => void;
 }
 
 const HEARTS_RULES = {
-  title: 'Hearts',
-  overview: 'A trick-taking game where the goal is to avoid taking hearts and the Queen of Spades. The player with the lowest score at the end wins.',
-  players: '4 players',
-  deck: 'Standard 52-card deck',
-  goal: 'Have the fewest points when any player reaches 100.',
+  title: "Hearts",
+  overview:
+    "A trick-taking game where the goal is to avoid taking hearts and the Queen of Spades. The player with the lowest score at the end wins.",
+  players: "4 players",
+  deck: "Standard 52-card deck",
+  goal: "Have the fewest points when any player reaches 100.",
   sections: [
     {
-      heading: 'Dealing & Passing',
+      heading: "Dealing & Passing",
       items: [
-        'Each player is dealt 13 cards.',
-        'Before each round, pass 3 cards to another player: left, right, across, then no pass (repeating).',
+        "Each player is dealt 13 cards.",
+        "Before each round, pass 3 cards to another player: left, right, across, then no pass (repeating).",
       ],
     },
     {
-      heading: 'Playing Tricks',
+      heading: "Playing Tricks",
       items: [
-        'The player with the 2 of Clubs leads the first trick.',
-        'Players must follow the lead suit if possible. If not, they may play any card.',
-        'The highest card of the lead suit wins the trick.',
-        'The trick winner leads the next trick.',
+        "The player with the 2 of Clubs leads the first trick.",
+        "Players must follow the lead suit if possible. If not, they may play any card.",
+        "The highest card of the lead suit wins the trick.",
+        "The trick winner leads the next trick.",
       ],
     },
     {
-      heading: 'Restrictions',
+      heading: "Restrictions",
       items: [
         'Hearts cannot be led until a heart has been played on a previous trick ("breaking hearts").',
-        'No points may be played on the first trick (no hearts or Queen of Spades).',
+        "No points may be played on the first trick (no hearts or Queen of Spades).",
       ],
     },
     {
-      heading: 'Scoring',
+      heading: "Scoring",
       items: [
-        'Each heart taken = 1 point.',
-        'Queen of Spades = 13 points.',
-        'Shooting the Moon: If one player takes ALL hearts and the Queen of Spades, they score 0 and everyone else gets 26 points.',
-        'Game ends when a player reaches 100 points. Lowest score wins.',
+        "Each heart taken = 1 point.",
+        "Queen of Spades = 13 points.",
+        "Shooting the Moon: If one player takes ALL hearts and the Queen of Spades, they score 0 and everyone else gets 26 points.",
+        "Game ends when a player reaches 100 points. Lowest score wins.",
       ],
     },
   ],
 };
 
 const SPADES_RULES = {
-  title: 'Spades',
-  overview: 'A partnership trick-taking game where spades are always trump. Bid the number of tricks you think your team will take, then try to hit your bid.',
-  players: '4 players (2 teams of 2, partners sit across)',
-  deck: 'Standard 52-card deck',
-  goal: 'First team to reach 500 points wins.',
+  title: "Spades",
+  overview:
+    "A partnership trick-taking game where spades are always trump. Bid the number of tricks you think your team will take, then try to hit your bid.",
+  players: "4 players (2 teams of 2, partners sit across)",
+  deck: "Standard 52-card deck",
+  goal: "First team to reach 500 points wins.",
   sections: [
     {
-      heading: 'Dealing & Bidding',
+      heading: "Dealing & Bidding",
       items: [
-        'Each player is dealt 13 cards.',
-        'Starting left of the dealer, each player bids the number of tricks they expect to take (1–13).',
-        'Partners\' bids are added together as the team\'s contract.',
-        'Nil bid: Bid 0 tricks for a bonus — but if you take any trick, it\'s a penalty.',
+        "Each player is dealt 13 cards.",
+        "Starting left of the dealer, each player bids the number of tricks they expect to take (1–13).",
+        "Partners' bids are added together as the team's contract.",
+        "Nil bid: Bid 0 tricks for a bonus — but if you take any trick, it's a penalty.",
       ],
     },
     {
-      heading: 'Playing Tricks',
+      heading: "Playing Tricks",
       items: [
-        'The player left of the dealer leads the first trick.',
-        'Players must follow the lead suit if possible.',
-        'If you can\'t follow suit, you may play any card (including a spade to trump).',
-        'Spades beat all other suits. Highest card of the lead suit wins unless trumped.',
+        "The player left of the dealer leads the first trick.",
+        "Players must follow the lead suit if possible.",
+        "If you can't follow suit, you may play any card (including a spade to trump).",
+        "Spades beat all other suits. Highest card of the lead suit wins unless trumped.",
       ],
     },
     {
-      heading: 'Restrictions',
+      heading: "Restrictions",
       items: [
         'Spades cannot be led until a spade has been used to trump another suit ("breaking spades").',
       ],
     },
     {
-      heading: 'Scoring',
+      heading: "Scoring",
       items: [
-        'Making your bid: team scores 10 × bid. Each overtrick (bag) = 1 point.',
-        'Failing your bid: team loses 10 × bid.',
-        'Nil bonus: +100 for success, −100 for failure.',
-        'Sandbagging: Every 10 accumulated bags = −100 point penalty.',
-        'First team to 500 wins. If both reach 500 on the same round, highest score wins.',
+        "Making your bid: team scores 10 × bid. Each overtrick (bag) = 1 point.",
+        "Failing your bid: team loses 10 × bid.",
+        "Nil bonus: +100 for success, −100 for failure.",
+        "Sandbagging: Every 10 accumulated bags = −100 point penalty.",
+        "First team to 500 wins. If both reach 500 on the same round, highest score wins.",
       ],
     },
   ],
 };
 
 const EUCHRE_RULES = {
-  title: 'Euchre',
-  overview: 'A fast-paced partnership trick-taking game with a small deck. The team that calls trump must win at least 3 of 5 tricks to score.',
-  players: '4 players (2 teams of 2, partners sit across)',
-  deck: '24 cards: 9, 10, J, Q, K, A in each suit',
-  goal: 'First team to reach 10 points wins.',
+  title: "Euchre",
+  overview:
+    "A fast-paced partnership trick-taking game with a small deck. The team that calls trump must win at least 3 of 5 tricks to score.",
+  players: "4 players (2 teams of 2, partners sit across)",
+  deck: "24 cards: 9, 10, J, Q, K, A in each suit",
+  goal: "First team to reach 10 points wins.",
   sections: [
     {
-      heading: 'Card Ranking (Trump Suit)',
+      heading: "Card Ranking (Trump Suit)",
       items: [
-        'Right Bower: Jack of the trump suit (highest card in the game).',
-        'Left Bower: Jack of the same-color suit (second highest).',
-        'Then: A, K, Q, 10, 9 of trump.',
-        'Non-trump suits rank: A, K, Q, J, 10, 9 (the Left Bower leaves its original suit).',
+        "Right Bower: Jack of the trump suit (highest card in the game).",
+        "Left Bower: Jack of the same-color suit (second highest).",
+        "Then: A, K, Q, 10, 9 of trump.",
+        "Non-trump suits rank: A, K, Q, J, 10, 9 (the Left Bower leaves its original suit).",
       ],
     },
     {
-      heading: 'Dealing & Trump Selection',
+      heading: "Dealing & Trump Selection",
       items: [
-        'Each player is dealt 5 cards. One card is turned face-up.',
+        "Each player is dealt 5 cards. One card is turned face-up.",
         'Round 1: Starting left of dealer, each player may tell the dealer to "pick it up" (that suit becomes trump) or pass.',
-        'If the dealer picks it up, they swap the face-up card for a discard.',
-        'Round 2: If all pass, each player (except the turned-up suit) may name a different suit as trump, or pass.',
-        'If all pass again, the dealer is forced to choose (stick the dealer).',
+        "If the dealer picks it up, they swap the face-up card for a discard.",
+        "Round 2: If all pass, each player (except the turned-up suit) may name a different suit as trump, or pass.",
+        "If all pass again, the dealer is forced to choose (stick the dealer).",
       ],
     },
     {
-      heading: 'Playing Tricks',
+      heading: "Playing Tricks",
       items: [
-        'The player left of the dealer leads the first trick.',
-        'Players must follow the lead suit if possible (the Left Bower belongs to the trump suit, not its printed suit).',
-        'Highest trump wins, or highest card of the lead suit if no trump played.',
-        '5 tricks are played per round.',
+        "The player left of the dealer leads the first trick.",
+        "Players must follow the lead suit if possible (the Left Bower belongs to the trump suit, not its printed suit).",
+        "Highest trump wins, or highest card of the lead suit if no trump played.",
+        "5 tricks are played per round.",
       ],
     },
     {
-      heading: 'Scoring',
+      heading: "Scoring",
       items: [
-        'Calling team wins 3–4 tricks = 1 point.',
-        'Calling team wins all 5 tricks (march) = 2 points.',
-        'Defending team wins 3+ tricks (euchre) = 2 points to defenders.',
-        'First team to 10 points wins.',
+        "Calling team wins 3–4 tricks = 1 point.",
+        "Calling team wins all 5 tricks (march) = 2 points.",
+        "Defending team wins 3+ tricks (euchre) = 2 points to defenders.",
+        "First team to 10 points wins.",
       ],
     },
   ],
 };
 
 const RUMMY_RULES = {
-  title: 'Rummy',
-  overview: 'A classic card game where you draw and discard to form melds — sets of matching ranks or runs of consecutive cards in the same suit. Be the first to go out!',
-  players: '2-6 players',
-  deck: 'Standard 52-card deck',
-  goal: 'Have the fewest points when any player reaches the target score.',
+  title: "Rummy",
+  overview:
+    "A classic card game where you draw and discard to form melds — sets of matching ranks or runs of consecutive cards in the same suit. Be the first to go out!",
+  players: "2-6 players",
+  deck: "Standard 52-card deck",
+  goal: "Have the fewest points when any player reaches the target score.",
   sections: [
     {
-      heading: 'Dealing',
+      heading: "Dealing",
       items: [
-        '2 players: 10 cards each.',
-        '3-4 players: 7 cards each.',
-        '5-6 players: 6 cards each.',
-        'Remaining cards form a face-down draw pile. The top card is flipped to start the discard pile.',
+        "2 players: 10 cards each.",
+        "3-4 players: 7 cards each.",
+        "5-6 players: 6 cards each.",
+        "Remaining cards form a face-down draw pile. The top card is flipped to start the discard pile.",
       ],
     },
     {
-      heading: 'On Your Turn',
+      heading: "On Your Turn",
       items: [
-        'Draw one card — either from the draw pile (face down) or the top of the discard pile (face up).',
-        'Optionally lay down melds from your hand.',
-        'Discard one card face up onto the discard pile to end your turn.',
+        "Draw one card — either from the draw pile (face down) or the top of the discard pile (face up).",
+        "Optionally lay down melds from your hand.",
+        "Discard one card face up onto the discard pile to end your turn.",
       ],
     },
     {
-      heading: 'Melds',
+      heading: "Melds",
       items: [
-        'Set: 3 or 4 cards of the same rank (e.g., three Kings).',
-        'Run: 3 or more consecutive cards of the same suit (e.g., 4-5-6 of Hearts).',
-        'Aces can be low (A-2-3) but not wrap around (K-A-2).',
+        "Set: 3 or 4 cards of the same rank (e.g., three Kings).",
+        "Run: 3 or more consecutive cards of the same suit (e.g., 4-5-6 of Hearts).",
+        "Aces can be low (A-2-3) but not wrap around (K-A-2).",
       ],
     },
     {
-      heading: 'Going Out & Scoring',
+      heading: "Going Out & Scoring",
       items: [
         'A player "goes out" when they have no cards left (through melding and/or discarding).',
-        'Other players score penalty points for cards left in hand: face cards = 10, Aces = 1, number cards = face value.',
-        'The player who went out scores 0 for the round.',
-        'Game ends when someone reaches the target score. Lowest total score wins.',
+        "Other players score penalty points for cards left in hand: face cards = 10, Aces = 1, number cards = face value.",
+        "The player who went out scores 0 for the round.",
+        "Game ends when someone reaches the target score. Lowest total score wins.",
       ],
     },
   ],
 };
 
 const SEVEN_SIX_RULES = {
-  title: 'Seven-Six',
-  overview: 'A trick-taking bidding game where hand sizes shrink then grow. Bid exactly how many tricks you\'ll take — hit your bid to score, miss and you get zero!',
-  players: '2-7 players',
-  deck: 'Standard 52-card deck (no jokers)',
-  goal: 'Have the highest cumulative score after all rounds.',
+  title: "Seven-Six",
+  overview:
+    "A trick-taking bidding game where hand sizes shrink then grow. Bid exactly how many tricks you'll take — hit your bid to score, miss and you get zero!",
+  players: "2-7 players",
+  deck: "Standard 52-card deck (no jokers)",
+  goal: "Have the highest cumulative score after all rounds.",
   sections: [
     {
-      heading: 'Round Structure',
+      heading: "Round Structure",
       items: [
-        'Hands go: 7, 6, 5, 4, 3, 2, 1, 2, 3, 4, 5, 6, 7 (13 rounds for 2-7 players).',
-        'For 8+ players, the max hand size adjusts so cards fit.',
-        'First dealer is chosen by dealing one card each — highest card (suit tiebreak: Spades > Hearts > Clubs > Diamonds) deals first.',
+        "Hands go: 7, 6, 5, 4, 3, 2, 1, 2, 3, 4, 5, 6, 7 (13 rounds for 2-7 players).",
+        "For 8+ players, the max hand size adjusts so cards fit.",
+        "First dealer is chosen by dealing one card each — highest card (suit tiebreak: Spades > Hearts > Clubs > Diamonds) deals first.",
       ],
     },
     {
-      heading: 'Dealing & Trump',
+      heading: "Dealing & Trump",
       items: [
-        'Dealer deals cards clockwise, one at a time.',
-        'After dealing, the top card of the remaining deck is flipped face-up — its suit is trump for the round.',
+        "Dealer deals cards clockwise, one at a time.",
+        "After dealing, the top card of the remaining deck is flipped face-up — its suit is trump for the round.",
       ],
     },
     {
-      heading: 'Bidding',
+      heading: "Bidding",
       items: [
-        'Bidding starts clockwise from the dealer.',
-        'Each player bids how many tricks they expect to win (0 to hand size).',
-        'Dealer restriction: the total of all bids cannot equal the hand size. The dealer must choose a different number.',
+        "Bidding starts clockwise from the dealer.",
+        "Each player bids how many tricks they expect to win (0 to hand size).",
+        "Dealer restriction: the total of all bids cannot equal the hand size. The dealer must choose a different number.",
       ],
     },
     {
-      heading: 'Playing Tricks',
+      heading: "Playing Tricks",
       items: [
-        'Player clockwise from dealer leads the first trick.',
-        'You must follow the led suit if you have it. You may only play trump or off-suit cards when you have none of the led suit.',
+        "Player clockwise from dealer leads the first trick.",
+        "You must follow the led suit if you have it. You may only play trump or off-suit cards when you have none of the led suit.",
         'Trump cannot be led until it has been "broken" (played on a previous trick). Exception: if your hand is all trump.',
-        'Highest trump wins; otherwise, highest card of the led suit wins. Off-suit non-trump never wins.',
+        "Highest trump wins; otherwise, highest card of the led suit wins. Off-suit non-trump never wins.",
       ],
     },
     {
-      heading: 'Scoring',
+      heading: "Scoring",
       items: [
-        'Hit your bid exactly: score bid + 10 points.',
-        'Miss your bid (over or under): score 0 points.',
-        'Example: bid 3 and take 3 tricks = 13 points. Bid 3 and take 2 or 4 = 0 points.',
-        'Dealer rotates clockwise each round. Highest total score wins.',
+        "Hit your bid exactly: score bid + 10 points.",
+        "Miss your bid (over or under): score 0 points.",
+        "Example: bid 3 and take 3 tricks = 13 points. Bid 3 and take 2 or 4 = 0 points.",
+        "Dealer rotates clockwise each round. Highest total score wins.",
       ],
     },
   ],
@@ -241,54 +246,54 @@ const RULES: Record<string, typeof HEARTS_RULES> = {
   spades: SPADES_RULES,
   euchre: EUCHRE_RULES,
   rummy: RUMMY_RULES,
-  'seven-six': SEVEN_SIX_RULES,
+  "seven-six": SEVEN_SIX_RULES,
 };
 
 export function RulesModal({ gameType, open, onClose }: RulesModalProps) {
-  const overlayRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
-    }
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
-  }, [open, onClose]);
-
-  if (!open) return null;
-
   const rules = RULES[gameType];
   if (!rules) return null;
 
   return (
-    <div
-      ref={overlayRef}
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm"
-      onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
-    >
-      <div className="bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col mx-4">
+    <Dialog open={open} onClose={onClose} titleId="rules-title">
+      <div className="bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col ">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-[var(--border-subtle)] shrink-0">
-          <h2 className="text-base font-bold">{rules.title} — How to Play</h2>
+          <h2 id="rules-title" className="text-base font-bold">
+            {rules.title} — How to Play
+          </h2>
           <button
             onClick={onClose}
-            className="p-1 rounded-md hover:bg-white/[0.08] transition-colors text-[var(--text-secondary)] hover:text-white"
+            aria-label="Close rules"
+            className="min-h-11 min-w-11 p-1 rounded-md hover:bg-white/[0.08] transition-colors text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
           >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           </button>
         </div>
 
         {/* Body */}
         <div className="overflow-y-auto px-5 py-4 space-y-4">
-          <p className="text-[13px] text-[var(--text-secondary)] leading-relaxed">{rules.overview}</p>
+          <p className="text-[13px] text-[var(--text-secondary)] leading-relaxed">
+            {rules.overview}
+          </p>
 
-          <div className="flex gap-4 text-[12px]">
+          <div className="flex flex-wrap gap-4 text-[12px]">
             <div className="flex items-center gap-1.5">
               <span className="text-[var(--text-muted)]">Players:</span>
-              <span className="text-[var(--text-primary)]">{rules.players}</span>
+              <span className="text-[var(--text-primary)]">
+                {rules.players}
+              </span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="text-[var(--text-muted)]">Deck:</span>
@@ -297,17 +302,28 @@ export function RulesModal({ gameType, open, onClose }: RulesModalProps) {
           </div>
 
           <div className="px-3 py-2 rounded-lg bg-[var(--accent-gold)]/8 border border-[var(--accent-gold)]/15">
-            <span className="text-[12px] font-semibold text-[var(--accent-gold)]">Goal: </span>
-            <span className="text-[12px] text-[var(--text-secondary)]">{rules.goal}</span>
+            <span className="text-[12px] font-semibold text-[var(--accent-gold)]">
+              Goal:{" "}
+            </span>
+            <span className="text-[12px] text-[var(--text-secondary)]">
+              {rules.goal}
+            </span>
           </div>
 
           {rules.sections.map((section) => (
             <div key={section.heading}>
-              <h3 className="text-[13px] font-semibold mb-1.5">{section.heading}</h3>
+              <h3 className="text-[13px] font-semibold mb-1.5">
+                {section.heading}
+              </h3>
               <ul className="space-y-1">
                 {section.items.map((item, i) => (
-                  <li key={i} className="flex gap-2 text-[12px] text-[var(--text-secondary)] leading-relaxed">
-                    <span className="text-[var(--text-muted)] shrink-0 mt-0.5">•</span>
+                  <li
+                    key={i}
+                    className="flex gap-2 text-[12px] text-[var(--text-secondary)] leading-relaxed"
+                  >
+                    <span className="text-[var(--text-muted)] shrink-0 mt-0.5">
+                      •
+                    </span>
                     <span>{item}</span>
                   </li>
                 ))}
@@ -326,6 +342,6 @@ export function RulesModal({ gameType, open, onClose }: RulesModalProps) {
           </button>
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 }

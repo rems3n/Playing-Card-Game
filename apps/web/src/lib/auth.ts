@@ -1,12 +1,12 @@
-import NextAuth from 'next-auth';
-import Google from 'next-auth/providers/google';
+import NextAuth from "next-auth";
+import Google from "next-auth/providers/google";
 
 const providers = [];
 
 // Only add Google provider if credentials are configured
 if (
   process.env.GOOGLE_CLIENT_ID &&
-  process.env.GOOGLE_CLIENT_ID !== 'placeholder'
+  process.env.GOOGLE_CLIENT_ID !== "placeholder"
 ) {
   providers.push(
     Google({
@@ -24,6 +24,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       if (account && profile) {
         token.provider = account.provider;
         token.providerId = account.providerAccountId;
+        token.emailVerified =
+          (profile as { email_verified?: boolean }).email_verified === true;
         token.picture = (profile as any).picture ?? (profile as any).image;
       }
       return token;
@@ -33,14 +35,15 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         session.user.id = token.sub!;
         (session.user as any).provider = token.provider;
         (session.user as any).providerId = token.providerId;
+        (session.user as any).emailVerified = token.emailVerified;
       }
       return session;
     },
   },
   pages: {
-    signIn: '/auth/login',
+    signIn: "/auth/login",
   },
   session: {
-    strategy: 'jwt',
+    strategy: "jwt",
   },
 });
