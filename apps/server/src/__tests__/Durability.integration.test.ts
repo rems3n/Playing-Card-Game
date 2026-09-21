@@ -68,7 +68,9 @@ describe.skipIf(process.env.RUN_DURABILITY_TESTS !== "1")(
       const guest = randomUUID();
       room.participants.set(0, guest);
       const state = room.engine.getState();
-      state.players[0].userId = randomUUID(); // Missing FK: force failure after the game-row insert.
+      const invalidSeat = (room.engine.getWinnerSeat() + 1) % state.players.length;
+      // Keep the winner valid so the game insert succeeds before the player FK fails.
+      state.players[invalidSeat].userId = randomUUID();
       const persistence = new PersistenceService();
       await expect(
         persistence.saveCompletedGame(id, room, room.engine.getWinnerSeat()),
@@ -76,7 +78,7 @@ describe.skipIf(process.env.RUN_DURABILITY_TESTS !== "1")(
       expect(
         await db.query.games.findFirst({ where: eq(games.id, id) }),
       ).toBeUndefined();
-      state.players[0].userId = null;
+      state.players[invalidSeat].userId = null;
       await Promise.all([
         persistence.saveCompletedGame(id, room, room.engine.getWinnerSeat()),
         persistence.saveCompletedGame(id, room, room.engine.getWinnerSeat()),
