@@ -192,5 +192,10 @@ describe("waiting room regressions", () => {
     await stranger.send("game:replace_with_ai", { gameId, seatIndex: 0 });
     expect(stranger.last("game:error").code).toBe("NOT_IN_GAME");
     expect((await service.getRoom(gameId))!.aiPlayers.size).toBe(0);
+    await stranger.send("game:deal_next", { gameId, roundNumber: 0 });
+    expect(stranger.last("game:error").message).toBe("You are not in this game");
+    await stranger.send("game:set_auto_deal", { gameId, enabled: true });
+    expect(stranger.last("game:error").message).toBe("You are not in this game");
+    expect((await service.getRoom(gameId))!.autoDeal).toBe(false);
   });
 });

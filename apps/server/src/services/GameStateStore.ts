@@ -18,6 +18,7 @@ export interface TrickReview {
 }
 
 export interface SerializedGame {
+  autoDeal?: boolean;
   trickReview?: TrickReview;
   participants?: Array<[number, string]>;
   gameId: string;

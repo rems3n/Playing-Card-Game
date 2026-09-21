@@ -180,6 +180,9 @@ function FamilyTable() {
       </div>
     );
   const reviewing = state.phase === GamePhase.TrickResolution;
+  const roundOver = state.phase === GamePhase.RoundScoring;
+  const familyGame = [GameType.SevenSix, GameType.Euchre].includes(state.gameType);
+  const trumpCard = state.gameType === GameType.SevenSix ? state.trumpCard : state.turnedUpCard;
   const completed = reviewing ? state.lastTrick : undefined;
   const winnerName =
     completed?.winningSeat === state.mySeat
@@ -189,6 +192,7 @@ function FamilyTable() {
   const myTurn =
     !done &&
     !reviewing &&
+    !roundOver &&
     connection.connected &&
     state.currentPlayerSeat === state.mySeat;
   const playing = state.phase === GamePhase.Playing;
@@ -209,6 +213,8 @@ function FamilyTable() {
     ? Math.min(...scores)
     : Math.max(...scores);
   const winners = state.players.filter((p) => scores[p.seatIndex] === best);
+  const handBest = Math.max(...state.roundScores);
+  const handWinners = state.players.filter((p) => state.roundScores[p.seatIndex] === handBest);
   function play() {
     if (!selected || !gameId || !myTurn || pending || !legal(selected)) return;
     setPending(true);
@@ -311,6 +317,8 @@ function FamilyTable() {
             <span role="status">
               {reviewing
                 ? `${winnerName} ${completed?.winningSeat === state.mySeat ? "win" : "wins"} the trick`
+                : roundOver
+                  ? "Hand complete"
                 : done
                   ? "Thanks for playing"
                   : myTurn
@@ -328,6 +336,54 @@ function FamilyTable() {
                 : "Choosing trump"}
             </span>
           </div>
+          {familyGame && (trumpCard || state.trumpSuit) && (
+            <section className="trump-panel" aria-label="Trump for this hand">
+              {trumpCard && (
+                <div className={`face-card ${["H", "D"].includes(trumpCard.suit) ? "red" : ""}`}
+                  role="img" aria-label={`${state.gameType === GameType.SevenSix ? "Trump card" : "Turned-up card"}: ${label(trumpCard)}`}>
+                  <Face card={trumpCard} />
+                </div>
+              )}
+              <div>
+                <p className="eyebrow">{state.trumpSuit ? "TRUMP" : "TURNED-UP CARD"}</p>
+                <h2>{state.trumpSuit ? `${symbols[state.trumpSuit]} ${suits[state.trumpSuit]}` : trumpCard ? label(trumpCard) : "Choosing trump"}</h2>
+                <p>{state.gameType === GameType.SevenSix
+                  ? `${trumpCard ? label(trumpCard) + " · " : ""}Set aside for this hand. No player can hold it.`
+                  : state.phase === GamePhase.Bidding
+                    ? "The turned-up card is picked up by the dealer if its suit is ordered."
+                    : state.trumpCallRound === 1
+                      ? "The dealer picked up the turned-up card and discarded one card."
+                      : "The turned-up card was passed. Trump was chosen in the second bidding round."}</p>
+              </div>
+            </section>
+          )}
+          {roundOver && (
+            <section className="panel round-result" aria-label="Hand results">
+              <p className="eyebrow">HAND {state.roundNumber + 1} COMPLETE</p>
+              <h2>{handBest === 0 ? "No player made their bid" : state.gameType === GameType.Euchre
+                ? `Team ${(handWinners[0].seatIndex % 2) + 1} wins the hand`
+                : `${handWinners.map(p => p.seatIndex === state.mySeat ? "You" : p.displayName).join(" & ")} ${handWinners.length > 1 || handWinners[0]?.seatIndex === state.mySeat ? "earn" : "earns"} the most points`}</h2>
+              <ul className="round-points">
+                {state.players.map(p => <li key={p.seatIndex}><span>{p.seatIndex === state.mySeat ? "You" : p.displayName}</span><strong>+{state.roundScores[p.seatIndex]} points</strong></li>)}
+              </ul>
+              <p>{state.autoDeal ? "The next hand will be dealt automatically after 5 seconds. Turn off auto-deal below to pause." : "Review the scores, then deal when everyone is ready."}</p>
+              <button className="button primary" disabled={pending || !connection.connected} onClick={() => {
+                if (pending || !connection.connected) return;
+                setPending(true);
+                socket.emit("game:deal_next", { gameId: gameId!, roundNumber: state.roundNumber });
+              }}>{pending ? "Dealing…" : "Deal next hand"}</button>
+            </section>
+          )}
+          {familyGame && !done && (
+            <label className="auto-deal-control">
+              <input type="checkbox" checked={state.autoDeal ?? false} disabled={pending || !connection.connected}
+                onChange={(event) => {
+                  setPending(true);
+                  socket.emit("game:set_auto_deal", { gameId: gameId!, enabled: event.target.checked });
+                }} />
+              <span>Automatically deal the next hand <small>Applies to this table for the rest of this game. Turn off anytime.</small></span>
+            </label>
+          )}
           <div className="felt-table">
             <div className="opponents">
               {state.players
@@ -335,7 +391,7 @@ function FamilyTable() {
                 .map((p) => (
                   <div
                     key={p.seatIndex}
-                    className={`opponent ${state.currentPlayerSeat === p.seatIndex && !done && !reviewing ? "active" : ""} ${completed?.winningSeat === p.seatIndex ? "won-trick" : ""}`}
+                    className={`opponent ${state.currentPlayerSeat === p.seatIndex && !done && !reviewing && !roundOver ? "active" : ""} ${completed?.winningSeat === p.seatIndex ? "won-trick" : ""}`}
                   >
                     <span className="avatar">{p.displayName[0]}</span>
                     <div>
@@ -429,7 +485,7 @@ function FamilyTable() {
               </span>
             </div>
           </div>
-          <div className="hand-panel">
+          {!roundOver && !done && <div className="hand-panel">
             <div className="hand-heading">
               <strong>
                 Your hand <span>· {state.myHand.length} cards</span>
@@ -472,7 +528,7 @@ function FamilyTable() {
                 {pending ? "Sending…" : "Play card"} <span aria-hidden>↑</span>
               </button>
             </div>
-          </div>
+          </div>}
         </section>
         <aside className="table-aside">
           <section className="panel score-panel">

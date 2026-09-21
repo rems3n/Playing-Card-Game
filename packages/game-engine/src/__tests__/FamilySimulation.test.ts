@@ -80,6 +80,9 @@ describe("seeded complete family games", () => {
         }
         if (state.phase === GamePhase.Bidding) {
           if (engine instanceof SevenSixEngine) {
+            const trump = engine.getTrumpCard()!;
+            expect(state.players.flatMap(p => p.hand).some(c => c.suit === trump.suit && c.rank === trump.rank)).toBe(false);
+            expect(engine.getVisibleState(seat).trumpCard).toEqual(trump);
             const bids = engine.getLegalBids(seat);
             expect(bids.length).toBeGreaterThan(0);
             engine.placeBid(seat, bids[Math.floor(random() * bids.length)]);

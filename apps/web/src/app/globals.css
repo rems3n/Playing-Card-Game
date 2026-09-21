@@ -1542,7 +1542,6 @@ input::placeholder {
   margin-top: 6px;
   font-size: 18px;
 }
-.bid-stepper,
 .bid-options {
   display: flex;
   justify-content: center;
@@ -1553,7 +1552,6 @@ input::placeholder {
 .bid-options {
   flex-wrap: wrap;
 }
-.bid-stepper button,
 .bid-options button {
   min-width: 44px;
   min-height: 44px;
@@ -1566,13 +1564,7 @@ input::placeholder {
   color: white;
   border-color: #2d6447;
 }
-.bid-stepper output {
-  min-width: 48px;
-  font-size: 26px;
-  font-weight: 700;
-}
-.bid-options button:disabled,
-.bid-stepper button:disabled {
+.bid-options button:disabled {
   opacity: 0.4;
 }
 .bid-restriction {
@@ -1671,4 +1663,35 @@ input::placeholder {
   .trick-winner .face-card {
     animation: none;
   }
+}
+
+.trump-panel {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 18px 22px;
+  margin: 0 0 16px;
+  border: 2px solid #b2944e;
+  border-radius: 12px;
+  background: #fff9e9;
+  color: #25362b;
+}
+.trump-panel h2 { font-size: 28px; text-transform: capitalize; margin: 2px 0 6px; }
+.trump-panel p { margin: 0; }
+.trump-panel .eyebrow { color: #705319; }
+.trump-panel .face-card { width: 64px; height: 94px; }
+.auto-deal-control { display: flex; gap: 12px; align-items: center; padding: 12px 0 18px; cursor: pointer; }
+.auto-deal-control input { width: 22px; height: 22px; flex: 0 0 auto; accent-color: #2d6447; }
+.auto-deal-control small { display: block; color: var(--text-secondary); font-size: 12px; }
+.round-result { padding: 24px; margin-bottom: 12px; }
+.round-result h2 { font-size: 24px; }
+.round-result .button { margin-top: 16px; }
+.round-points { list-style: none; padding: 0; margin: 16px 0; display: flex; flex-wrap: wrap; gap: 12px; }
+.round-points li { display: flex; flex-direction: column; padding: 10px 16px; background: #f1f4ed; border-radius: 8px; }
+@media (max-width: 600px) {
+  .trump-panel { gap: 14px; padding: 14px; }
+  .trump-panel h2 { font-size: 24px; }
+  .trump-panel p { font-size: 12px; }
+  .round-result { padding: 18px; }
+  .round-result .button { width: 100%; }
 }

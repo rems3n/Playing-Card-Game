@@ -149,6 +149,14 @@ describe("real authenticated Socket.IO gameplay", () => {
               expect(state.legalMoves).toEqual([]);
               return;
             }
+            if (state.phase === GamePhase.RoundScoring) {
+              const action = `deal:${state.roundNumber}`;
+              if (state.mySeat === 0 && !actions.has(action)) {
+                actions.add(action);
+                socket.emit("game:deal_next", { gameId, roundNumber: state.roundNumber });
+              }
+              return;
+            }
             if (
               state.currentPlayerSeat !== state.mySeat ||
               state.phase === GamePhase.GameOver

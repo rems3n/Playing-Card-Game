@@ -106,7 +106,6 @@ export function BiddingPanel({
     const validBid = legalBids.includes(selectedBid)
       ? selectedBid
       : legalBids[0];
-    const index = legalBids.indexOf(validBid);
     return (
       <section className="bidding-panel" aria-label="Choose your bid">
         <h2>Bidding</h2>
@@ -138,27 +137,6 @@ export function BiddingPanel({
             <p id="bid-help">
               Choose how many tricks you expect to win, then submit your bid.
             </p>
-            <div className="bid-stepper">
-              <button
-                type="button"
-                aria-label="Decrease bid"
-                disabled={pending || index === 0}
-                onClick={() => setSelectedBid(legalBids[index - 1])}
-              >
-                −
-              </button>
-              <output aria-label="Selected bid" aria-live="polite">
-                {validBid}
-              </output>
-              <button
-                type="button"
-                aria-label="Increase bid"
-                disabled={pending || index === legalBids.length - 1}
-                onClick={() => setSelectedBid(legalBids[index + 1])}
-              >
-                +
-              </button>
-            </div>
             <div className="bid-options" role="group" aria-label="Bid options">
               {Array.from({ length: handSize + 1 }, (_, bid) => (
                 <button

@@ -35,12 +35,12 @@ function setup(overrides: Partial<VisibleGameState> = {}) {
   return { onBid, props, ...render(<BiddingPanel {...props} />) };
 }
 describe("Seven-Six bidding controls", () => {
-  it("submits the value chosen with + and − without clicking a number box", async () => {
+  it("uses number tiles and an explicit submit button without a stepper", async () => {
     const { onBid } = setup();
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Increase bid" }));
-    await user.click(screen.getByRole("button", { name: "Increase bid" }));
-    await user.click(screen.getByRole("button", { name: "Decrease bid" }));
+    expect(screen.queryByRole("button", { name: "Increase bid" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Decrease bid" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Select bid 2" }));
     expect(onBid).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Submit bid: 2" }));
     expect(onBid).toHaveBeenCalledExactlyOnceWith(2);
@@ -55,7 +55,7 @@ describe("Seven-Six bidding controls", () => {
     await user.keyboard("{Enter}");
     expect(onBid).toHaveBeenCalledExactlyOnceWith(5);
   });
-  it("skips a dealer-restricted bid and disables out-of-range controls", async () => {
+  it("disables the dealer-restricted bid and supports zero and maximum bids", async () => {
     const { onBid } = setup({ dealerSeat: 0, bids: [null, 1, 2, 2] });
     const user = userEvent.setup();
     expect(
@@ -65,25 +65,13 @@ describe("Seven-Six bidding controls", () => {
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
-    await user.click(screen.getByRole("button", { name: "Increase bid" }));
+    await user.click(screen.getByRole("button", { name: "Select bid 3" }));
     await user.click(screen.getByRole("button", { name: "Submit bid: 3" }));
     expect(onBid).toHaveBeenCalledExactlyOnceWith(3);
     await user.click(screen.getByRole("button", { name: "Select bid 0" }));
-    expect(
-      (
-        screen.getByRole("button", {
-          name: "Decrease bid",
-        }) as HTMLButtonElement
-      ).disabled,
-    ).toBe(true);
+    expect(screen.getByRole("button", { name: "Submit bid: 0" })).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Select bid 7" }));
-    expect(
-      (
-        screen.getByRole("button", {
-          name: "Increase bid",
-        }) as HTMLButtonElement
-      ).disabled,
-    ).toBe(true);
+    expect(screen.getByRole("button", { name: "Submit bid: 7" })).toBeTruthy();
   });
   it("does not submit again while a bid is pending", () => {
     const { onBid, props, rerender } = setup();

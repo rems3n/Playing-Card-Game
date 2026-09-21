@@ -85,6 +85,10 @@ describe("completed trick presentation", () => {
             );
           continue;
         }
+        if (state.phase === GamePhase.RoundScoring) {
+          await service.dealNextRound(id, state.roundNumber);
+          continue;
+        }
         const before = structuredClone(state);
         const card = room.engine.getLegalMoves(seat)[0];
         const trick = await service.playCard(id, seat, card);
@@ -92,7 +96,7 @@ describe("completed trick presentation", () => {
         count++;
         if (
           room.engine.getState().roundNumber !== before.roundNumber ||
-          state.phase === GamePhase.GameOver
+          state.phase === GamePhase.GameOver || state.phase === GamePhase.RoundScoring
         )
           boundaries++;
         expect(trick.cards.at(-1)).toEqual({ seatIndex: seat, card });
@@ -165,7 +169,7 @@ describe("completed trick presentation", () => {
           .filter((e) => e.type === GameEventType.TrickCompleted)
           .map((e) => e.sequenceNum),
       );
-      expect(delays.filter((ms) => ms > TRICK_REVIEW_MS - 500)).toHaveLength(
+      expect(delays.filter((ms) => ms > TRICK_REVIEW_MS - 500 && ms <= TRICK_REVIEW_MS)).toHaveLength(
         completed.length,
       );
       expect(room.engine.getState().phase).toBe(GamePhase.GameOver);

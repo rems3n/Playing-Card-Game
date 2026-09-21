@@ -36,8 +36,10 @@ type AnyEngine =
   HeartsEngine | SpadesEngine | EuchreEngine | RummyEngine | SevenSixEngine;
 
 export const TRICK_REVIEW_MS = 3500;
+export const ROUND_REVIEW_MS = 5000;
 
 export interface GameRoom {
+  autoDeal?: boolean;
   trickReview?: TrickReview;
   engine: AnyEngine;
   gameType: GameType;
@@ -73,6 +75,7 @@ export class GameService {
       gameType: room.gameType,
       engineData: room.engine.serialize(),
       trickReview: room.trickReview,
+      autoDeal: room.autoDeal ?? false,
       aiSeats: Array.from(room.aiPlayers.entries()).map(([seat, ai]) => ({
         seat,
         difficulty: ai.difficulty,
@@ -140,6 +143,9 @@ export class GameService {
         throw new Error(`Unknown game type: ${data.gameType}`);
     }
     engine.restore(data.engineData);
+    engine.setRoundPause(
+      engine instanceof SevenSixEngine || engine instanceof EuchreEngine,
+    );
 
     const aiPlayers = new Map<number, AIPlayer>();
     for (const ai of data.aiSeats) {
@@ -158,6 +164,7 @@ export class GameService {
       engine,
       gameType: data.gameType,
       trickReview: data.trickReview,
+      autoDeal: data.autoDeal ?? false,
       aiPlayers,
       playerSockets,
       socketSeats,
@@ -204,9 +211,13 @@ export class GameService {
         throw new Error(`Unknown game type: ${gameType}`);
     }
 
+    engine.setRoundPause(
+      engine instanceof SevenSixEngine || engine instanceof EuchreEngine,
+    );
     const room: GameRoom = {
       engine,
       gameType,
+      autoDeal: false,
       aiPlayers: new Map(),
       playerSockets: new Map(),
       socketSeats: new Map(),
@@ -326,6 +337,28 @@ export class GameService {
       );
   }
 
+  async dealNextRound(gameId: string, roundNumber: number): Promise<void> {
+    const room = await this.ensureLoaded(gameId);
+    if (!room) throw new Error("Game not found");
+    this.assertNotReviewing(room);
+    if (!(room.engine instanceof SevenSixEngine || room.engine instanceof EuchreEngine))
+      throw new Error("This game does not support manual dealing");
+    if (!Number.isInteger(roundNumber) || room.engine.getState().roundNumber !== roundNumber)
+      throw new Error("This hand has already advanced. Wait for the table to update.");
+    room.engine.startNextRound();
+    await this.persist(gameId);
+  }
+
+  async setAutoDeal(gameId: string, enabled: boolean): Promise<void> {
+    const room = await this.ensureLoaded(gameId);
+    if (!room) throw new Error("Game not found");
+    if (typeof enabled !== "boolean") throw new Error("Choose on or off for automatic dealing");
+    if (!(room.engine instanceof SevenSixEngine || room.engine instanceof EuchreEngine))
+      throw new Error("This game does not support automatic dealing");
+    room.autoDeal = enabled;
+    await this.persist(gameId);
+  }
+
   async playCard(
     gameId: string,
     seatIndex: number,
@@ -334,8 +367,8 @@ export class GameService {
     const room = await this.ensureLoaded(gameId);
     if (!room) throw new Error("Game not found");
     this.assertNotReviewing(room);
-    // Engines resolve and deal synchronously. Preserve the final public table
-    // before that transition, including the last card and round's trick totals.
+    // Engines resolve synchronously. Preserve the final public table before
+    // scoring/advancement, including the last card and round's trick totals.
     const views = room.engine
       .getState()
       .players.map((_, seat) =>
@@ -498,9 +531,9 @@ export class GameService {
         player.isAI = live.players[seat].isAI;
         player.displayName = live.players[seat].displayName;
       });
-      return view;
+      return { ...view, autoDeal: room.autoDeal ?? false };
     }
-    return { ...live, lastTrick: review?.trick };
+    return { ...live, lastTrick: review?.trick, autoDeal: room.autoDeal ?? false };
   }
 
   async getPhase(gameId: string): Promise<GamePhase> {
@@ -604,6 +637,20 @@ export class GameService {
     while (this.games.get(gameId) === room) {
       if (await this.waitForTrickReview(gameId)) await onStateChanged?.();
       if (this.games.get(gameId) !== room) return;
+      if (room.engine.getState().phase === GamePhase.RoundScoring) {
+        const allBots = room.engine.getState().players.every((p) => p.isAI);
+        if (!room.autoDeal && !allBots) return;
+        const round = room.engine.getState().roundNumber;
+        // Leave a readable score summary, and recheck the preference after waiting.
+        await this.delay(ROUND_REVIEW_MS);
+        if (this.games.get(gameId) !== room) return;
+        if (room.engine.getState().phase !== GamePhase.RoundScoring ||
+            room.engine.getState().roundNumber !== round) continue;
+        if (!room.autoDeal && !room.engine.getState().players.every((p) => p.isAI)) return;
+        room.engine.startNextRound();
+        await this.persist(gameId);
+        await onStateChanged?.();
+      }
       const eventCount = room.engine.getEvents().length;
       await this.executeAIPhase(gameId, onCardPlayed, onStateChanged);
       if (

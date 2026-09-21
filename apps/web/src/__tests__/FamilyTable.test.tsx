@@ -148,3 +148,40 @@ describe("family table interactions", () => {
     expect(useGameStore.getState().gameState!.gameId).toBe("test-game");
   });
 });
+
+describe("trump and next-hand controls", () => {
+  it("shows the actual trump card separately from playable cards", () => {
+    const state = initial();
+    state.trumpCard = { rank: 12, suit: Suit.Spades };
+    useGameStore.getState().setGameState(state);
+    render(<GameBoard />);
+    const trump = screen.getByRole("region", { name: "Trump for this hand" });
+    expect(within(trump).getByRole("img", { name: "Trump card: Q of spades" })).toBeTruthy();
+    expect(trump.textContent).toContain("No player can hold it");
+    expect(screen.queryByRole("button", { name: "Q of spades" })).toBeNull();
+  });
+  it("shows hand scores and requires an explicit deal without duplicate submissions", () => {
+    const state = initial();
+    state.phase = GamePhase.RoundScoring;
+    state.roundScores = [11, 0, 10, 0];
+    state.myHand = [];
+    state.autoDeal = false;
+    useGameStore.getState().setGameState(state);
+    render(<GameBoard />);
+    expect(screen.getByRole("region", { name: "Hand results" }).textContent).toContain("You earn the most points");
+    expect(screen.queryByRole("button", { name: "Play card" })).toBeNull();
+    expect(transport.emit).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Deal next hand" }));
+    fireEvent.click(screen.getByRole("button", { name: "Dealing…" }));
+    expect(transport.emit).toHaveBeenCalledExactlyOnceWith("game:deal_next", { gameId: "test-game", roundNumber: 0 });
+  });
+  it("can toggle auto-deal on and off during play", () => {
+    render(<GameBoard />);
+    fireEvent.click(screen.getByRole("checkbox", { name: /Automatically deal/ }));
+    expect(transport.emit).toHaveBeenLastCalledWith("game:set_auto_deal", { gameId: "test-game", enabled: true });
+    receive({ ...initial(), autoDeal: true });
+    expect((screen.getByRole("checkbox") as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect(transport.emit).toHaveBeenLastCalledWith("game:set_auto_deal", { gameId: "test-game", enabled: false });
+  });
+});

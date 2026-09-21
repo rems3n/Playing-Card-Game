@@ -683,7 +683,31 @@ export function setupGameHandlers(
       }
     });
 
-    // ── Bid (Spades) ──
+    socket.on("game:deal_next", async ({ gameId, roundNumber }) => {
+      try {
+        if ((await gameService.getSeatForSocket(gameId, socket.id)) === undefined)
+          throw new Error("You are not in this game");
+        await gameService.dealNextRound(gameId, roundNumber);
+        await broadcastStates(io, gameService, gameId);
+        await handleAITurns(io, gameService, gameId);
+      } catch (err: any) {
+        socket.emit("game:error", { code: "DEAL_FAILED", message: err.message });
+      }
+    });
+
+    socket.on("game:set_auto_deal", async ({ gameId, enabled }) => {
+      try {
+        if ((await gameService.getSeatForSocket(gameId, socket.id)) === undefined)
+          throw new Error("You are not in this game");
+        await gameService.setAutoDeal(gameId, enabled);
+        await broadcastStates(io, gameService, gameId);
+        await handleAITurns(io, gameService, gameId);
+      } catch (err: any) {
+        socket.emit("game:error", { code: "AUTO_DEAL_FAILED", message: err.message });
+      }
+    });
+
+    // ── Bid (Spades / Seven-Six) ──
     socket.on("game:bid", async (data) => {
       try {
         const { gameId, bid } = data;

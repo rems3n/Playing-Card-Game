@@ -157,6 +157,8 @@ export interface VisibleGameState {
   mySeat: number;
   legalMoves: Card[];
   lastTrick?: CompletedTrick;
+  /** Shared table preference, persisted for this game only. */
+  autoDeal?: boolean;
   // Euchre bidding options are supplied by the authoritative engine.
   turnedUpCard?: Card;
   trumpCallRound?: number;

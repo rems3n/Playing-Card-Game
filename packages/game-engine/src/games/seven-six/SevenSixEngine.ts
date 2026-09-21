@@ -182,9 +182,9 @@ export class SevenSixEngine extends GameEngine {
       this.state.players[i].tricksWon = 0;
     }
 
-    // Flip the top card of the remaining deck as trump
+    // Reserve the first undealt card as trump; it cannot enter any hand.
     const dealtCount = numPlayers * handSize;
-    this.trumpCard = deck[dealtCount];
+    this.trumpCard = deck.splice(dealtCount, 1)[0];
     this.state.trumpSuit = this.trumpCard.suit;
     this.state.trumpCard = this.trumpCard;
 
@@ -393,40 +393,13 @@ export class SevenSixEngine extends GameEngine {
     return winner;
   }
 
-  // ── Override endRound to rotate dealer ──
+  // ── Rotate dealer only when the next hand is actually dealt ──
 
-  protected endRound(): void {
-    this.setPhase(GamePhase.RoundScoring);
-    const roundScores = this.calculateRoundScores();
-
-    for (let i = 0; i < roundScores.length; i++) {
-      this.state.scores[i] += roundScores[i];
-      this.state.roundScores[i] = roundScores[i];
-    }
-
-    this.addEvent(GameEventType.RoundEnded, undefined, {
-      roundScores,
-      totalScores: [...this.state.scores],
-    });
-
-    if (this.isGameOver()) {
-      this.setPhase(GamePhase.GameOver);
-      this.addEvent(GameEventType.GameEnded, this.getWinnerSeat(), {
-        finalScores: [...this.state.scores],
-      });
-    } else {
-      // Rotate dealer clockwise
-      this.dealerSeat =
-        (this.dealerSeat + 1) % this.state.players.length;
-
-      this.state.roundNumber++;
-      this.state.trickNumber = 0;
-      this.state.currentTrick = [];
-      for (const p of this.state.players) {
-        p.tricksWon = 0;
-      }
-      this.deal();
-    }
+  override startNextRound(): void {
+    if (this.state.phase !== GamePhase.RoundScoring)
+      throw new Error('The hand is not ready for another deal');
+    this.dealerSeat = (this.dealerSeat + 1) % this.state.players.length;
+    super.startNextRound();
   }
 
   // ── Visible state override for seven-six fields ──

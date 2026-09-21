@@ -8,7 +8,7 @@ legacy Hearts/Spades/Rummy screens, and stronger AI are separate workstreams.
 
 | Finding | Cause | Correction and regression check |
 | --- | --- | --- |
-| +/− bidding has no submit action | The stepper changes local state; only number tiles sent a bid | Stepper and number tiles select; a labeled Submit bid button confirms. Component tests exercise mouse and Enter, bounds, restricted dealer bid, pending requests and other-player turns. |
+| Bid controls were redundant | The stepper duplicated the number tiles | Seven-Six now uses number tiles and Submit bid on desktop/mobile web. Component tests exercise selection, Enter, dealer restriction and duplicate-submit prevention. |
 | Last card disappears when a bot finishes a trick | Engine clears the trick synchronously; bot broadcast skipped the human-only delay | GameService preserves a personalized completed-trick view and holds progression for 3.5 seconds for both human/bot endings. Tests cover every trick, round transition, final-game transition, and restore during review. |
 | Winner is not identifiable | Active family table ignores old trick events | The completed state includes winner and all cards; gold card/player highlight, winner text, reduced-motion support and Last trick dialog. |
 | Table cards become square; suit is off center | A 72px flex basis acts on height inside a column; fixed suit offsets | Non-shrinking, explicit portrait dimensions and 50% centering. Live desktop DOM measurements confirmed 72 × 104px cards with centered suits. |
@@ -33,7 +33,7 @@ legacy Hearts/Spades/Rummy screens, and stronger AI are separate workstreams.
   and outsiders, two identically named players, host-only start, guest reconnect,
   two human clients with bots, all tricks through game-over and saved feedback.
   Storage is isolated in memory in this transport suite.
-- **UI interaction tests:** stepper/number/keyboard bidding, duplicate-submit
+- **UI interaction tests:** number/keyboard bidding, duplicate-submit
   prevention, selection-then-play, winner and counters, Last trick after a new
   round, Euchre pass labels, and ignoring another game's delayed state.
 - **Existing room/auth/AI coverage:** duplicate starts, failed starts and retry,
@@ -50,7 +50,7 @@ verify the real-time pause, portrait card shape, centered symbols, focus and lay
 
 ## Deployed desktop acceptance
 
-On the Railway preview, selected a bid with +/− and submitted it using the new
+On the Railway preview, selected a bid and submitted it using the
 Submit button, then played through multiple tricks against a bot. Confirmed
 completed cards and winner feedback appear, own-seat trick counts agree with the
 scoreboard, and Last trick retains the cards and winner after play resumes.
@@ -76,3 +76,22 @@ constitute real phone, multi-person network, or native-app acceptance.
 
 Use the Railway preview for acceptance. Do not describe this pass as a production
 certification or claim that simulation covers every interface or failure mode.
+
+## Trump card and next-hand follow-up
+
+- The full Seven-Six trump card appears in a prominent panel with the suit name.
+  It is drawn from the undealt cards and set aside; simulations check it is never
+  in a player's hand across all supported seat counts and hand sizes.
+- Family tables now stop in RoundScoring after the final-trick review. Scores,
+  bids, trick counts and the previous trump remain visible until Deal next hand.
+  No next-round cards are dealt in advance. Any seated player can continue the table.
+- Automatically deal next hand is a shared, game-scoped setting, off by default.
+  When enabled, the scored-hand summary remains for five seconds after the
+  3.5-second final-trick review. Disabling it cancels the pending automatic deal.
+  The setting and paused round survive restoration; a new game starts with it off.
+- Regression checks cover both family engines, stale/double deals, premature
+  deals, outsider requests, retained scores, dealer rotation, delay cancellation,
+  re-enabling, and manual dealing throughout complete socket-driven games.
+- Native compatibility controls are included; real-device acceptance is still open.
+- Existing Euchre pickup rules are unchanged: its ordered upcard can enter the
+  dealer's hand. The set-aside rule above applies to Seven-Six.
