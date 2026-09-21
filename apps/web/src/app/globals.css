@@ -752,6 +752,7 @@ input::placeholder {
 }
 .game-heading {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
@@ -886,7 +887,8 @@ input::placeholder {
   display: block;
   width: 72px;
   height: 104px;
-  flex: 0 0 72px;
+  flex: 0 0 auto;
+  aspect-ratio: 9 / 13;
   border-radius: 8px;
   border: 1px solid #c9d2c3;
   background: #fffef9;
@@ -912,8 +914,9 @@ input::placeholder {
 }
 .card-suit {
   position: absolute;
-  top: 38px;
-  left: 25px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   font-size: 34px;
   line-height: 1;
 }
@@ -1086,6 +1089,9 @@ input::placeholder {
 }
 .bid-surface {
   width: min(100%, 450px);
+  background: #fffef9;
+  padding: 22px;
+  border-radius: 12px;
   color: var(--text-primary);
 }
 .bid-surface button {
@@ -1184,7 +1190,8 @@ input::placeholder {
     font-size: 11px;
   }
   .opponent-score {
-    display: none;
+    display: block;
+    font-size: 13px;
   }
   .trick-space {
     min-height: 220px;
@@ -1193,11 +1200,11 @@ input::placeholder {
   .face-card {
     width: 60px;
     height: 88px;
-    flex-basis: 60px;
+    flex-basis: auto;
   }
   .card-suit {
-    left: 21px;
-    top: 32px;
+    left: 50%;
+    top: 50%;
     font-size: 28px;
   }
   .card-corner {
@@ -1497,4 +1504,170 @@ input::placeholder {
 .room-name-form label {
   max-width: 280px;
   flex: 1;
+}
+
+/* Family-game interaction and completed-trick review. */
+.bidding-panel {
+  color: var(--text-primary);
+  text-align: center;
+}
+.bidding-panel h2 {
+  font-size: 18px;
+  font-weight: 700;
+}
+.bidding-panel p {
+  font-size: 13px;
+  margin: 10px 0;
+}
+.bid-summary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin: 18px 0;
+}
+.bid-summary > div {
+  min-width: 65px;
+  max-width: 110px;
+}
+.bid-summary span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+.bid-summary strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 18px;
+}
+.bid-stepper,
+.bid-options {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0;
+}
+.bid-options {
+  flex-wrap: wrap;
+}
+.bid-stepper button,
+.bid-options button {
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid #c5cfbf;
+  border-radius: 6px;
+  background: #f2f4ee;
+}
+.bid-options button[aria-pressed="true"] {
+  background: #2d6447;
+  color: white;
+  border-color: #2d6447;
+}
+.bid-stepper output {
+  min-width: 48px;
+  font-size: 26px;
+  font-weight: 700;
+}
+.bid-options button:disabled,
+.bid-stepper button:disabled {
+  opacity: 0.4;
+}
+.bid-restriction {
+  color: #755326;
+}
+.trick-display {
+  width: 100%;
+  text-align: center;
+}
+.trick-announcement {
+  margin: 0 0 20px;
+  color: #fff5c2;
+  font-size: 17px;
+  font-weight: 700;
+}
+.trick-announcement small {
+  display: block;
+  margin-top: 5px;
+  font-size: 12px;
+  color: #e1eee5;
+  font-weight: 400;
+}
+.trick-play .face-card {
+  flex-shrink: 0;
+  animation: card-arrive 0.25s ease-out;
+}
+.trick-winner .face-card {
+  outline: 3px solid #edce73;
+  outline-offset: 3px;
+  box-shadow: 0 0 22px #efc95966;
+  animation: trick-win 0.65s ease-out;
+}
+.winner-tag {
+  font-size: 11px;
+  color: #ffe7a1;
+}
+.won-trick {
+  outline: 2px solid #edce73;
+  outline-offset: 2px;
+  border-radius: 9px;
+}
+.opponent-score {
+  text-align: right;
+  white-space: nowrap;
+}
+.opponent-score strong {
+  font-size: 16px;
+  overflow: visible;
+}
+.opponent-score strong small {
+  display: inline;
+  font-weight: 400;
+}
+.my-seat.won-trick {
+  padding: 8px;
+}
+.last-trick-dialog {
+  max-width: 700px;
+  width: min(700px, calc(100vw - 32px));
+  text-align: center;
+  padding: 24px;
+}
+.last-trick-dialog h2 {
+  font-size: 24px;
+}
+.last-trick-dialog .trick-cards {
+  margin: 24px 0;
+}
+.last-trick-dialog .winner-tag {
+  color: #6f5316;
+}
+@keyframes card-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes trick-win {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.07);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .trick-play .face-card,
+  .trick-winner .face-card {
+    animation: none;
+  }
 }

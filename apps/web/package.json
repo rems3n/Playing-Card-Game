@@ -6,26 +6,31 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "clean": "rm -rf .next"
+    "clean": "rm -rf .next",
+    "test": "vitest run"
   },
   "dependencies": {
     "@card-game/shared-socket": "*",
     "@card-game/shared-store": "*",
     "@card-game/shared-types": "*",
+    "jose": "^6.0.0",
     "next": "^16.3.5",
     "next-auth": "5.0.0-beta.32",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "socket.io-client": "^4.8.0",
-    "zustand": "^5.0.0",
-    "jose": "^6.0.0"
+    "zustand": "^5.0.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.0",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
+    "jsdom": "^26.1.0",
     "postcss": "^8.5.0",
     "tailwindcss": "^4.1.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^3.2.7"
   }
 }

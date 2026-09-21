@@ -521,9 +521,7 @@ export function setupGameHandlers(
 
         // Broadcast updated state to all players (shows reconnected status)
         await broadcastStates(io, gameService, gameId);
-        if (room?.engine.getState().phase === GamePhase.GameOver)
-          await finalizeGame(io, gameService, gameId);
-        else await handleAITurns(io, gameService, gameId);
+        await handleAITurns(io, gameService, gameId);
       } catch (err: any) {
         socket.emit("game:error", {
           code: "JOIN_FAILED",
@@ -631,53 +629,15 @@ export function setupGameHandlers(
           return;
         }
 
-        await gameService.playCard(gameId, seat, card);
-
+        const trick = await gameService.playCard(gameId, seat, card);
         const room = await gameService.getRoom(gameId);
         if (!room) return;
-        const state = room.engine.getState();
-
         io.to(gameId).emit("game:card_played", {
           seatIndex: seat,
           card,
-          nextSeat: state.currentPlayerSeat,
+          nextSeat: room.engine.getState().currentPlayerSeat,
         });
-
-        if (
-          state.phase === GamePhase.TrickResolution ||
-          state.currentTrick.length === 0
-        ) {
-          const events = room.engine.getEvents();
-          const lastTrickEvent = [...events]
-            .reverse()
-            .find((e) => e.type === "trick_completed");
-          if (lastTrickEvent) {
-            io.to(gameId).emit("game:trick_complete", {
-              winningSeat: lastTrickEvent.seatIndex!,
-              cards: lastTrickEvent.payload.cards as any,
-              points: lastTrickEvent.payload.points as number,
-            });
-            // Pause so players can see the completed trick before clearing
-            await new Promise((r) => setTimeout(r, 2500));
-          }
-        }
-
-        if (
-          state.phase === GamePhase.RoundScoring ||
-          state.phase === GamePhase.Passing ||
-          state.phase === GamePhase.Dealing
-        ) {
-          io.to(gameId).emit("game:round_end", {
-            roundScores: state.roundScores,
-            totalScores: state.scores,
-          });
-        }
-
-        if (state.phase === GamePhase.GameOver) {
-          await finalizeGame(io, gameService, gameId);
-          return;
-        }
-
+        if (trick) io.to(gameId).emit("game:trick_complete", trick);
         await broadcastStates(io, gameService, gameId);
         await handleAITurns(io, gameService, gameId);
       } catch (err: any) {
@@ -727,6 +687,8 @@ export function setupGameHandlers(
     socket.on("game:bid", async (data) => {
       try {
         const { gameId, bid } = data;
+        if (typeof bid !== "number" || !Number.isInteger(bid))
+          throw new Error("Choose a whole-number bid.");
         const seat = await gameService.getSeatForSocket(gameId, socket.id);
         if (seat === undefined) {
           socket.emit("game:error", {
@@ -738,17 +700,9 @@ export function setupGameHandlers(
 
         const room = await gameService.getRoom(gameId);
         if (room?.gameType === GameType.SevenSix) {
-          await gameService.sevenSixPlaceBid(
-            gameId,
-            seat,
-            typeof bid === "number" ? bid : 0,
-          );
+          await gameService.sevenSixPlaceBid(gameId, seat, bid);
         } else {
-          await gameService.placeBid(
-            gameId,
-            seat,
-            typeof bid === "number" ? bid : 0,
-          );
+          await gameService.placeBid(gameId, seat, bid);
         }
         await broadcastStates(io, gameService, gameId);
 
@@ -1070,24 +1024,22 @@ async function handleAITurns(
   gameService: GameService,
   gameId: string,
 ): Promise<void> {
-  await gameService.executeAITurns(gameId, (seatIndex, card) => {
-    // Broadcast each AI card play — use sync room access since we're in-callback
-    const room = gameService.getRoomSync(gameId);
-    if (!room) return;
-    const state = room.engine.getState();
-
-    io.to(gameId).emit("game:card_played", {
-      seatIndex,
-      card,
-      nextSeat: state.currentPlayerSeat,
-    });
-
-    // Send updated visible state to each human player
-    for (const [seat, socketId] of room.playerSockets) {
-      const visibleState = room.engine.getVisibleState(seat);
-      io.to(socketId).emit("game:state", visibleState);
-    }
-  });
+  await gameService.executeAITurns(
+    gameId,
+    async (seatIndex, card) => {
+      const room = gameService.getRoomSync(gameId);
+      if (!room) return;
+      io.to(gameId).emit("game:card_played", {
+        seatIndex,
+        card,
+        nextSeat: room.engine.getState().currentPlayerSeat,
+      });
+      if (room.trickReview && room.trickReview.until > Date.now())
+        io.to(gameId).emit("game:trick_complete", room.trickReview.trick);
+      await broadcastStates(io, gameService, gameId);
+    },
+    () => broadcastStates(io, gameService, gameId),
+  );
 
   const room = await gameService.getRoom(gameId);
   if (!room) return;

@@ -2,7 +2,13 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { GamePhase, GameType, type Card } from "@card-game/shared-types";
+import {
+  GamePhase,
+  GameType,
+  type Card,
+  type PlayedCard,
+  type VisiblePlayerState,
+} from "@card-game/shared-types";
 import { useSocket } from "@/hooks/useSocket";
 import { useGameStore } from "@card-game/shared-store";
 import { useConnection } from "../ConnectionProvider";
@@ -36,6 +42,49 @@ function Face({ card }: { card: Card }) {
     </>
   );
 }
+function TrickCards({
+  cards,
+  players,
+  mySeat,
+  winningSeat,
+}: {
+  cards: PlayedCard[];
+  players: VisiblePlayerState[];
+  mySeat: number;
+  winningSeat?: number;
+}) {
+  return (
+    <div
+      className="trick-cards"
+      role="group"
+      aria-label="Cards played in this trick"
+    >
+      {cards.map((play) => (
+        <div
+          className={`trick-play ${play.seatIndex === winningSeat ? "trick-winner" : ""}`}
+          key={play.seatIndex}
+        >
+          <div
+            className={`face-card ${["H", "D"].includes(play.card.suit) ? "red" : ""}`}
+            role="img"
+            aria-label={`${label(play.card)}${play.seatIndex === winningSeat ? ", winning card" : ""}`}
+          >
+            <Face card={play.card} />
+          </div>
+          <span>
+            {play.seatIndex === mySeat
+              ? "You"
+              : players[play.seatIndex]?.displayName}
+          </span>
+          {play.seatIndex === winningSeat && (
+            <strong className="winner-tag">Winner</strong>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function GameBoard() {
   const type = useGameStore((s) => s.gameState?.gameType);
   return type === GameType.Rummy ? <RummyBoard /> : <FamilyTable />;
@@ -56,6 +105,7 @@ function FamilyTable() {
   const [selected, setSelected] = useState<Card | null>(null);
   const [rules, setRules] = useState(false);
   const [leave, setLeave] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [saveStatus, setSaveStatus] = useState<boolean | undefined>();
   const [disconnected, setDisconnected] = useState<{
@@ -65,6 +115,7 @@ function FamilyTable() {
   useEffect(() => {
     setSaveStatus(undefined);
     setSelected(null);
+    setReviewOpen(false);
   }, [gameId]);
   useEffect(() => {
     const update = (next: NonNullable<typeof state>) => {
@@ -128,9 +179,18 @@ function FamilyTable() {
         </Link>
       </div>
     );
+  const reviewing = state.phase === GamePhase.TrickResolution;
+  const completed = reviewing ? state.lastTrick : undefined;
+  const winnerName =
+    completed?.winningSeat === state.mySeat
+      ? "You"
+      : state.players[completed?.winningSeat ?? -1]?.displayName;
   const done = !!gameOver || state.phase === GamePhase.GameOver;
   const myTurn =
-    !done && connection.connected && state.currentPlayerSeat === state.mySeat;
+    !done &&
+    !reviewing &&
+    connection.connected &&
+    state.currentPlayerSeat === state.mySeat;
   const playing = state.phase === GamePhase.Playing;
   const current = state.players.find(
     (p) => p.seatIndex === state.currentPlayerSeat,
@@ -155,13 +215,24 @@ function FamilyTable() {
     socket.emit("game:play_card", { gameId, card: selected });
   }
   return (
-    <div className="game-page">
+    <div
+      className="game-page"
+      data-phase={state.phase}
+      data-round={state.roundNumber}
+    >
       <div className="game-heading">
         <div>
           <p className="eyebrow">THE FAMILY TABLE</p>
           <h1>{name}</h1>
         </div>
         <div className="game-heading-actions">
+          <button
+            className="button secondary"
+            disabled={!state.lastTrick}
+            onClick={() => setReviewOpen(true)}
+          >
+            Last trick
+          </button>
           <button className="button secondary" onClick={() => setRules(true)}>
             Rules
           </button>
@@ -238,13 +309,15 @@ function FamilyTable() {
         <section className="table-main">
           <div className="table-status">
             <span role="status">
-              {done
-                ? "Thanks for playing"
-                : myTurn
-                  ? state.phase === GamePhase.Bidding
-                    ? "Your turn to bid"
-                    : "Your turn to play"
-                  : `Waiting for ${current?.displayName ?? "players"}`}
+              {reviewing
+                ? `${winnerName} ${completed?.winningSeat === state.mySeat ? "win" : "wins"} the trick`
+                : done
+                  ? "Thanks for playing"
+                  : myTurn
+                    ? state.phase === GamePhase.Bidding
+                      ? "Your turn to bid"
+                      : "Your turn to play"
+                    : `Waiting for ${current?.displayName ?? "players"}`}
             </span>
             <span>
               Round {state.roundNumber + 1}
@@ -262,7 +335,7 @@ function FamilyTable() {
                 .map((p) => (
                   <div
                     key={p.seatIndex}
-                    className={`opponent ${state.currentPlayerSeat === p.seatIndex && !done ? "active" : ""}`}
+                    className={`opponent ${state.currentPlayerSeat === p.seatIndex && !done && !reviewing ? "active" : ""} ${completed?.winningSeat === p.seatIndex ? "won-trick" : ""}`}
                   >
                     <span className="avatar">{p.displayName[0]}</span>
                     <div>
@@ -279,8 +352,14 @@ function FamilyTable() {
                           : `${p.cardCount} cards`}
                       </small>
                     </div>
-                    <span className="opponent-score">
-                      {scores[p.seatIndex]}
+                    <span
+                      className="opponent-score"
+                      aria-label={`${p.displayName}: ${p.tricksWon} tricks, ${scores[p.seatIndex]} points`}
+                    >
+                      <strong>
+                        {p.tricksWon} <small>tricks</small>
+                      </strong>
+                      <small>{scores[p.seatIndex]} pts</small>
                     </span>
                   </div>
                 ))}
@@ -291,6 +370,7 @@ function FamilyTable() {
                   <BiddingPanel
                     key={`${state.roundNumber}:${state.currentPlayerSeat}:${state.trumpCallRound}`}
                     gameState={state}
+                    pending={pending || !connection.connected}
                     onBid={(bid) => {
                       if (pending || !connection.connected) return;
                       setPending(true);
@@ -304,22 +384,24 @@ function FamilyTable() {
                   />
                 </div>
               ) : state.currentTrick.length ? (
-                <div className="trick-cards">
-                  {state.currentTrick.map((play) => (
-                    <div className="trick-play" key={play.seatIndex}>
-                      <div
-                        className={`face-card ${["H", "D"].includes(play.card.suit) ? "red" : ""}`}
-                        aria-label={label(play.card)}
-                      >
-                        <Face card={play.card} />
-                      </div>
-                      <span>
-                        {play.seatIndex === state.mySeat
-                          ? "You"
-                          : state.players[play.seatIndex]?.displayName}
-                      </span>
-                    </div>
-                  ))}
+                <div
+                  className="trick-display"
+                  key={`${state.roundNumber}:${state.trickNumber}`}
+                >
+                  {completed && (
+                    <p className="trick-announcement" role="status">
+                      {winnerName}{" "}
+                      {completed.winningSeat === state.mySeat ? "win" : "wins"}{" "}
+                      this trick
+                      <small>Review all cards before play continues</small>
+                    </p>
+                  )}
+                  <TrickCards
+                    cards={state.currentTrick}
+                    players={state.players}
+                    mySeat={state.mySeat}
+                    winningSeat={completed?.winningSeat}
+                  />
                 </div>
               ) : (
                 <div className="table-watermark">
@@ -332,7 +414,9 @@ function FamilyTable() {
                 </div>
               )}
             </div>
-            <div className="my-seat">
+            <div
+              className={`my-seat ${completed?.winningSeat === state.mySeat ? "won-trick" : ""}`}
+            >
               <span className="avatar">{me?.displayName[0] ?? "Y"}</span>
               <strong>
                 {me?.displayName} <small>(you)</small>
@@ -340,7 +424,9 @@ function FamilyTable() {
               {state.mySeat === state.dealerSeat && (
                 <span className="dealer-tag">DEALER</span>
               )}
-              <span className="my-score">{scores[state.mySeat]} points</span>
+              <span className="my-score">
+                {me?.tricksWon ?? 0} tricks · {scores[state.mySeat]} points
+              </span>
             </div>
           </div>
           <div className="hand-panel">
@@ -420,7 +506,11 @@ function FamilyTable() {
                         <small> · Team {(p.seatIndex % 2) + 1}</small>
                       )}
                     </th>
-                    <td>{state.bids?.[p.seatIndex] ?? "—"}</td>
+                    <td>
+                      {state.bids?.[p.seatIndex] === -1
+                        ? "Pass"
+                        : (state.bids?.[p.seatIndex] ?? "—")}
+                    </td>
                     <td>{p.tricksWon}</td>
                     <td>
                       <strong>{scores[p.seatIndex]}</strong>
@@ -441,6 +531,36 @@ function FamilyTable() {
           </p>
         </aside>
       </div>
+      <Dialog
+        open={reviewOpen}
+        onClose={() => setReviewOpen(false)}
+        titleId="last-trick-title"
+      >
+        <section className="panel last-trick-dialog">
+          <h2 id="last-trick-title">Last trick</h2>
+          {state.lastTrick && (
+            <>
+              <p>
+                Round {state.lastTrick.roundNumber + 1} · Trick{" "}
+                {state.lastTrick.trickNumber + 1}
+              </p>
+              <TrickCards
+                cards={state.lastTrick.cards}
+                players={state.players}
+                mySeat={state.mySeat}
+                winningSeat={state.lastTrick.winningSeat}
+              />
+            </>
+          )}
+          <button
+            className="button primary"
+            autoFocus
+            onClick={() => setReviewOpen(false)}
+          >
+            Back to game
+          </button>
+        </section>
+      </Dialog>
       <RulesModal
         gameType={state.gameType as "seven-six" | "euchre"}
         open={rules}

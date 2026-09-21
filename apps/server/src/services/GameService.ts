@@ -1,6 +1,8 @@
 import { v4 as uuidv4 } from "uuid";
 import {
   type Card,
+  type CompletedTrick,
+  GameEventType,
   type GameConfig,
   type VisibleGameState,
   AIDifficulty,
@@ -24,16 +26,19 @@ import {
   chooseDrawSource,
   sevenSixBid,
 } from "@card-game/ai";
-import { GameStateStore, type SerializedGame } from "./GameStateStore.js";
+import {
+  GameStateStore,
+  type SerializedGame,
+  type TrickReview,
+} from "./GameStateStore.js";
 
 type AnyEngine =
-  | HeartsEngine
-  | SpadesEngine
-  | EuchreEngine
-  | RummyEngine
-  | SevenSixEngine;
+  HeartsEngine | SpadesEngine | EuchreEngine | RummyEngine | SevenSixEngine;
+
+export const TRICK_REVIEW_MS = 3500;
 
 export interface GameRoom {
+  trickReview?: TrickReview;
   engine: AnyEngine;
   gameType: GameType;
   aiPlayers: Map<number, AIPlayer>;
@@ -67,6 +72,7 @@ export class GameService {
       gameId,
       gameType: room.gameType,
       engineData: room.engine.serialize(),
+      trickReview: room.trickReview,
       aiSeats: Array.from(room.aiPlayers.entries()).map(([seat, ai]) => ({
         seat,
         difficulty: ai.difficulty,
@@ -151,6 +157,7 @@ export class GameService {
     const room: GameRoom = {
       engine,
       gameType: data.gameType,
+      trickReview: data.trickReview,
       aiPlayers,
       playerSockets,
       socketSeats,
@@ -312,11 +319,74 @@ export class GameService {
     await this.persist(gameId);
   }
 
-  async playCard(gameId: string, seatIndex: number, card: Card): Promise<void> {
+  private assertNotReviewing(room: GameRoom): void {
+    if (room.trickReview && room.trickReview.until > Date.now())
+      throw new Error(
+        "Please wait for the completed trick to finish displaying.",
+      );
+  }
+
+  async playCard(
+    gameId: string,
+    seatIndex: number,
+    card: Card,
+  ): Promise<CompletedTrick | undefined> {
     const room = await this.ensureLoaded(gameId);
     if (!room) throw new Error("Game not found");
+    this.assertNotReviewing(room);
+    // Engines resolve and deal synchronously. Preserve the final public table
+    // before that transition, including the last card and round's trick totals.
+    const views = room.engine
+      .getState()
+      .players.map((_, seat) =>
+        structuredClone(room.engine.getVisibleState(seat)),
+      );
+    const eventCount = room.engine.getEvents().length;
     room.engine.playCard(seatIndex, card);
+    const event = room.engine
+      .getEvents()
+      .slice(eventCount)
+      .find((event) => event.type === GameEventType.TrickCompleted);
+    let trick: CompletedTrick | undefined;
+    if (event) {
+      trick = {
+        sequence: event.sequenceNum,
+        roundNumber: views[0].roundNumber,
+        trickNumber: views[0].trickNumber,
+        winningSeat: event.seatIndex!,
+        cards: structuredClone(event.payload.cards) as CompletedTrick["cards"],
+        points: event.payload.points as number,
+      };
+      for (const view of views) {
+        view.phase = GamePhase.TrickResolution;
+        view.currentTrick = trick.cards;
+        view.currentPlayerSeat = trick.winningSeat;
+        view.legalMoves = [];
+        view.lastTrick = trick;
+        view.players[seatIndex].cardCount--;
+        view.players[trick.winningSeat].tricksWon++;
+        if (view.mySeat === seatIndex)
+          view.myHand = view.myHand.filter(
+            (c) => c.rank !== card.rank || c.suit !== card.suit,
+          );
+      }
+      room.trickReview = { until: Date.now() + TRICK_REVIEW_MS, trick, views };
+    }
     await this.persist(gameId);
+    return trick;
+  }
+
+  /** The same hold applies to human/bot last cards, new rounds, and game over. */
+  async waitForTrickReview(gameId: string): Promise<boolean> {
+    const room = await this.ensureLoaded(gameId);
+    const review = room?.trickReview;
+    if (!room || !review || review.until <= Date.now()) return false;
+    await this.delay(Math.max(0, review.until - Date.now()));
+    if (this.games.get(gameId) !== room || room.trickReview !== review)
+      return false;
+    review.until = 0;
+    await this.persist(gameId);
+    return true;
   }
 
   async passCards(
@@ -341,6 +411,7 @@ export class GameService {
     if (!room) throw new Error("Game not found");
     if (!(room.engine instanceof SpadesEngine))
       throw new Error("Not a Spades game");
+    this.assertNotReviewing(room);
     room.engine.placeBid(seatIndex, bid);
     await this.persist(gameId);
   }
@@ -393,6 +464,7 @@ export class GameService {
     if (!room) throw new Error("Game not found");
     if (!(room.engine instanceof SevenSixEngine))
       throw new Error("Not a Seven-Six game");
+    this.assertNotReviewing(room);
     room.engine.placeBid(seatIndex, bid);
     await this.persist(gameId);
   }
@@ -406,6 +478,7 @@ export class GameService {
     if (!room) throw new Error("Game not found");
     if (!(room.engine instanceof EuchreEngine))
       throw new Error("Not a Euchre game");
+    this.assertNotReviewing(room);
     room.engine.callTrump(seatIndex, suit);
     await this.persist(gameId);
   }
@@ -416,7 +489,18 @@ export class GameService {
   ): Promise<VisibleGameState> {
     const room = await this.ensureLoaded(gameId);
     if (!room) throw new Error("Game not found");
-    return room.engine.getVisibleState(seatIndex);
+    const live = room.engine.getVisibleState(seatIndex);
+    const review = room.trickReview;
+    if (review && review.until > Date.now()) {
+      const view = structuredClone(review.views[seatIndex]);
+      view.players.forEach((player, seat) => {
+        player.isConnected = live.players[seat].isConnected;
+        player.isAI = live.players[seat].isAI;
+        player.displayName = live.players[seat].displayName;
+      });
+      return view;
+    }
+    return { ...live, lastTrick: review?.trick };
   }
 
   async getPhase(gameId: string): Promise<GamePhase> {
@@ -496,26 +580,32 @@ export class GameService {
   /** One scheduler per game, continuing across bidding and round boundaries. */
   executeAITurns(
     gameId: string,
-    onCardPlayed?: (seatIndex: number, card: Card) => void,
+    onCardPlayed?: (seatIndex: number, card: Card) => void | Promise<void>,
+    onStateChanged?: () => void | Promise<void>,
   ): Promise<void> {
     const running = this.aiRuns.get(gameId);
     if (running) return running;
-    const pending = this.runAIUntilHumanTurn(gameId, onCardPlayed).finally(() =>
-      this.aiRuns.delete(gameId),
-    );
+    const pending = this.runAIUntilHumanTurn(
+      gameId,
+      onCardPlayed,
+      onStateChanged,
+    ).finally(() => this.aiRuns.delete(gameId));
     this.aiRuns.set(gameId, pending);
     return pending;
   }
 
   private async runAIUntilHumanTurn(
     gameId: string,
-    onCardPlayed?: (seatIndex: number, card: Card) => void,
+    onCardPlayed?: (seatIndex: number, card: Card) => void | Promise<void>,
+    onStateChanged?: () => void | Promise<void>,
   ): Promise<void> {
     const room = await this.ensureLoaded(gameId);
     if (!room) return;
     while (this.games.get(gameId) === room) {
+      if (await this.waitForTrickReview(gameId)) await onStateChanged?.();
+      if (this.games.get(gameId) !== room) return;
       const eventCount = room.engine.getEvents().length;
-      await this.executeAIPhase(gameId, onCardPlayed);
+      await this.executeAIPhase(gameId, onCardPlayed, onStateChanged);
       if (
         room.engine.getEvents().length === eventCount ||
         room.engine.getState().phase === GamePhase.GameOver
@@ -542,7 +632,8 @@ export class GameService {
 
   private async executeAIPhase(
     gameId: string,
-    onCardPlayed?: (seatIndex: number, card: Card) => void,
+    onCardPlayed?: (seatIndex: number, card: Card) => void | Promise<void>,
+    onStateChanged?: () => void | Promise<void>,
   ): Promise<void> {
     const room = await this.ensureLoaded(gameId);
     if (!room) return;
@@ -579,6 +670,8 @@ export class GameService {
         const bid = ai.chooseBid(visibleState);
         if (!(await this.pauseForAI(gameId, room, currentSeat, 500))) return;
         room.engine.placeBid(currentSeat, typeof bid === "number" ? bid : 2);
+        await this.persist(gameId);
+        await onStateChanged?.();
 
         const newState = room.engine.getState();
         if (newState.phase !== GamePhase.Bidding) break;
@@ -605,6 +698,8 @@ export class GameService {
         const bid = sevenSixBid(hand, trumpSuit, legalBids);
         if (!(await this.pauseForAI(gameId, room, currentSeat, 500))) return;
         ssEngine.placeBid(currentSeat, bid);
+        await this.persist(gameId);
+        await onStateChanged?.();
 
         const newState = ssEngine.getState();
         if (newState.phase !== GamePhase.Bidding) break;
@@ -638,6 +733,8 @@ export class GameService {
         if (!legalCalls.includes(call)) call = legalCalls[0];
         if (!(await this.pauseForAI(gameId, room, currentSeat, 500))) return;
         room.engine.callTrump(currentSeat, call);
+        await this.persist(gameId);
+        await onStateChanged?.();
 
         const newState = room.engine.getState();
         if (newState.phase !== GamePhase.Bidding) break;
@@ -723,10 +820,10 @@ export class GameService {
         ))
       )
         return;
-      room.engine.playCard(currentSeat, card);
-      await this.persist(gameId);
-
-      if (onCardPlayed) onCardPlayed(currentSeat, card);
+      await this.playCard(gameId, currentSeat, card);
+      await onCardPlayed?.(currentSeat, card);
+      if (await this.waitForTrickReview(gameId)) await onStateChanged?.();
+      if (this.games.get(gameId) !== room) return;
 
       const newState = room.engine.getState();
       if (newState.phase !== GamePhase.Playing) break;

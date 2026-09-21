@@ -40,23 +40,28 @@ account-only authorization, guest seat restoration, lobby ownership, repeated
 starts, and host transfer. CI additionally provisions disposable Postgres and Redis,
 applies migrations, forces a mid-save database failure, verifies rollback and
 concurrent retry, verifies private history access, and restores rooms/seats from Redis.
-CI builds both Railway Docker images. Locally, 133 tests pass (80 engine, 36 AI,
-17 server); the two database/Redis tests require the CI service containers.
+CI builds both Railway Docker images. The expanded suite includes 160 seeded complete
+family games, real Socket.IO mixed-player games, trick presentation/restoration,
+and web interaction regressions. See [FAMILY-GAME-QA.md](FAMILY-GAME-QA.md).
+The database/Redis tests require the CI service containers.
 
-The cloud browser could not open the local development server. Screenshots,
-real device interaction, and browser end-to-end acceptance are not yet verified.
-Do not infer visual QA from a successful Next.js build.
+The isolated Railway preview is deployed at https://cardarena-web-production.up.railway.app/.
+Initial live desktop checks passed for room creation/exit, refresh, and both games.
+User testing identified bidding and trick-presentation defects; their fixes and
+expanded coverage are documented in the QA report. Real-device acceptance remains
+required. Do not infer visual QA from a successful Next.js build.
 
 ## Remaining release gates
 
-1. Deploy this branch to isolated Railway staging with the new migration and matching
-   session-exchange secret. Verify Google sign-in, guest creation, CORS, and sockets.
+1. Isolated Railway staging and guest connections are running. Configure and verify
+   Google sign-in before treating account support as released.
 2. Test two independent browser profiles through create → join → start → complete →
    history; refresh both lobby and active table; interrupt Wi-Fi; restart the server.
    Repeat with 2 and 7 Seven-Six seats and 4 Euchre seats including a partial bot table.
 3. Inspect 360/390/768/1440-pixel layouts, keyboard focus, portrait/landscape, long
    player names, card readability, and touch controls on actual iOS/Android browsers.
-4. Add complete-trick presentation for bot tricks and same-group rematches. The
+4. Complete-trick presentation now covers humans and bots with winner highlighting
+   and Last trick review. Add same-group rematches. The
    current results action returns to game selection; it does not replace friends
    with bots under a misleading “play again” action.
 5. Add background retry/outbox processing for unsaved completed results before their
