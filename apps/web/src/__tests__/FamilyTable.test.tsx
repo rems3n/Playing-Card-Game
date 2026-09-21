@@ -190,11 +190,11 @@ describe("compact table menu", () => {
   it("opens scores and auto-deal settings and returns to the game", () => {
     render(<GameBoard />);
     fireEvent.click(screen.getByRole("button", { name: "Table menu: scores and settings" }));
-    const dialog = screen.getByRole("dialog", { name: "Table", exact: true });
+    const dialog = screen.getByRole("dialog", { name: /^Table$/ });
     expect(within(dialog).getByRole("heading", { name: "Scoreboard" })).toBeTruthy();
     fireEvent.click(within(dialog).getByRole("checkbox"));
     expect(transport.emit).toHaveBeenLastCalledWith("game:set_auto_deal", { gameId: "test-game", enabled: true });
     fireEvent.click(within(dialog).getByRole("button", { name: "Back to game" }));
-    expect(screen.queryByRole("dialog", { name: "Table", exact: true })).toBeNull();
+    expect(screen.queryByRole("dialog", { name: /^Table$/ })).toBeNull();
   });
 });
