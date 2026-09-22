@@ -22,7 +22,7 @@ export interface MediaSession {
   /** Silence one person for this listener only; nobody else is affected. */
   setMutedForMe(identity: string, muted: boolean): Promise<void>;
   /** Render a participant's video into an element, or clear it with null. */
-  attachVideo(identity: string, element: HTMLElement | null): void;
+  attachVideo(identity: string, element: HTMLVideoElement | null): void;
   /** Called on every change of participants or connection state. */
   onChange(listener: (snapshot: MediaSnapshot) => void): () => void;
 }

@@ -74,20 +74,18 @@ export async function createLiveKitSession(): Promise<MediaSession> {
       // Adaptive streaming and simulcast let the SFU drop video first when a
       // phone's connection degrades, so audio survives a weak network.
       room = new Room({ adaptiveStream: true, dynacast: true });
-      for (const name of [
-        RoomEvent.ParticipantConnected,
-        RoomEvent.ParticipantDisconnected,
-        RoomEvent.TrackSubscribed,
-        RoomEvent.TrackUnsubscribed,
-        RoomEvent.TrackMuted,
-        RoomEvent.TrackUnmuted,
-        RoomEvent.LocalTrackPublished,
-        RoomEvent.LocalTrackUnpublished,
-        RoomEvent.ConnectionStateChanged,
-        RoomEvent.Reconnecting,
-        RoomEvent.Reconnected,
-      ])
-        room.on(name as never, publish as never);
+      room
+        .on(RoomEvent.ParticipantConnected, publish)
+        .on(RoomEvent.ParticipantDisconnected, publish)
+        .on(RoomEvent.TrackSubscribed, publish)
+        .on(RoomEvent.TrackUnsubscribed, publish)
+        .on(RoomEvent.TrackMuted, publish)
+        .on(RoomEvent.TrackUnmuted, publish)
+        .on(RoomEvent.LocalTrackPublished, publish)
+        .on(RoomEvent.LocalTrackUnpublished, publish)
+        .on(RoomEvent.ConnectionStateChanged, publish)
+        .on(RoomEvent.Reconnecting, publish)
+        .on(RoomEvent.Reconnected, publish);
       room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
         speaking.clear();
         for (const speaker of speakers) speaking.add(speaker.identity);
@@ -175,7 +173,7 @@ export async function createLiveKitSession(): Promise<MediaSession> {
       }
       publish();
     },
-    attachVideo(identity: string, element: HTMLElement | null) {
+    attachVideo(identity: string, element: HTMLVideoElement | null) {
       if (!room) return;
       const person =
         room.localParticipant.identity === identity
@@ -184,7 +182,7 @@ export async function createLiveKitSession(): Promise<MediaSession> {
       const publication = person?.getTrackPublication(Track.Source.Camera);
       const track = publication?.track;
       if (!track) return;
-      if (element) track.attach(element as HTMLVideoElement);
+      if (element) track.attach(element);
       else track.detach();
     },
     onChange(listener) {

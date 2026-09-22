@@ -22,8 +22,9 @@ export function useMediaConfig(fetcher: typeof fetch | null = null) {
   const [config, setConfig] = useState<MediaConfig | null>(null);
   useEffect(() => {
     let live = true;
-    const get = fetcher ?? (typeof fetch === "function" ? fetch : null);
-    if (!get) return;
+    if (!fetcher && typeof fetch !== "function") return;
+    // Wrapped, not passed by reference: a detached fetch throws in browsers.
+    const get: typeof fetch = fetcher ?? ((...args) => fetch(...args));
     get(`${SERVER}/media/config`)
       .then((response) => (response.ok ? response.json() : null))
       .then((value: MediaConfig | null) => {
@@ -55,7 +56,7 @@ export interface MediaController {
   leave(): void;
   toggleMicrophone(): void;
   toggleCamera(): void;
-  attachVideo(identity: string, element: HTMLElement | null): void;
+  attachVideo(identity: string, element: HTMLVideoElement | null): void;
   dismissError(): void;
 }
 
@@ -216,7 +217,7 @@ export function useMedia({
   );
 
   const attachVideo = useCallback(
-    (identity: string, element: HTMLElement | null) =>
+    (identity: string, element: HTMLVideoElement | null) =>
       session.current?.attachVideo(identity, element),
     [],
   );
