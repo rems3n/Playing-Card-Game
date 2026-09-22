@@ -25,6 +25,14 @@ export class LiveKitProvider implements MediaProvider {
       throw new Error(
         "LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET are all required",
       );
+    // The browser opens a WebSocket to this URL. Pasting the project's https://
+    // dashboard address instead of its wss:// endpoint is the easy mistake, and
+    // without this check it starts cleanly and every call fails in the browser.
+    if (!/^wss?:\/\//.test(settings.url))
+      throw new Error(
+        `LIVEKIT_URL must be a WebSocket URL starting with wss:// (got "${settings.url}"). ` +
+          "The LiveKit Cloud dashboard shows it as the project URL.",
+      );
   }
 
   async issueToken(request: MediaTokenRequest): Promise<MediaTokenResult> {

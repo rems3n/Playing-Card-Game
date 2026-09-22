@@ -15,7 +15,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "db:migrate:production": "node dist/db/migrate.js"
+    "db:migrate:production": "node dist/db/migrate.js",
+    "media:check": "tsx src/scripts/checkMedia.ts"
   },
   "dependencies": {
     "@card-game/ai": "*",

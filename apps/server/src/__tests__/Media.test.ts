@@ -98,6 +98,24 @@ describe("choosing a media provider", () => {
         LIVEKIT_API_SECRET: "secret-secret-secret-secret-1234",
       }),
     ).toBeInstanceOf(LiveKitProvider);
+    // The https:// dashboard address is not the endpoint the browser connects
+    // to; saying so at start-up beats a call that silently never connects.
+    expect(
+      () =>
+        new LiveKitProvider({
+          url: "https://example.livekit.cloud",
+          apiKey: "key",
+          apiSecret: "secret-secret-secret-secret-1234",
+        }),
+    ).toThrow(/must be a WebSocket URL starting with wss:\/\//);
+    expect(
+      () =>
+        new LiveKitProvider({
+          url: "ws://localhost:7880",
+          apiKey: "key",
+          apiSecret: "secret-secret-secret-secret-1234",
+        }),
+    ).toBeTruthy();
   });
 
   it("reports itself as unavailable and issues nothing when disabled", async () => {

@@ -116,6 +116,32 @@ is no separate web-side media variable to keep in step.
 5. Confirm `GET https://<api-host>/media/config` returns
    `{"enabled":true,"provider":"livekit"}`.
 
+## Checking a LiveKit deployment
+
+A successful deploy only proves the three values are present and that the URL
+looks like a WebSocket address: the server refuses to start without all three,
+and refuses a URL that is not `ws://` or `wss://`, because pasting the project's
+`https://` dashboard address is the easy mistake and it otherwise starts cleanly
+and fails in every browser.
+
+It does **not** prove the key and secret belong to that project. This does:
+
+```bash
+MEDIA_PROVIDER=livekit LIVEKIT_URL=wss://<project>.livekit.cloud \
+LIVEKIT_API_KEY=... LIVEKIT_API_SECRET=... \
+npm run media:check --workspace=@card-game/server
+```
+
+It validates the configuration the way the server does, mints a table token with
+the grants a real player gets and prints them, then calls the LiveKit API with
+the same key and secret — a read, so no room is created and nothing is recorded.
+It distinguishes a rejected key from a host it could not reach, and says which.
+
+That leaves one thing it cannot do: two people hearing each other. Open the
+table in two browsers (or a browser and a phone), join as different players,
+and start the call from the table menu. Check both directions of audio, mute,
+and that leaving the table ends the call.
+
 To turn media off again, set `MEDIA_PROVIDER=none` and redeploy. Players keep
 playing; the call controls disappear.
 
