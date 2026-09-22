@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "clean": "rm -rf .next",
-    "test": "vitest run"
+    "test": "vitest run",
+    "qa:mobile": "node qa/mobile-layout.mjs"
   },
   "dependencies": {
     "@card-game/shared-socket": "*",
@@ -28,6 +29,7 @@
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "jsdom": "^26.1.0",
+    "playwright": "^1.56.1",
     "postcss": "^8.5.0",
     "tailwindcss": "^4.1.0",
     "typescript": "^5.7.0",
