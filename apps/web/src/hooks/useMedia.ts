@@ -36,6 +36,10 @@ export interface MediaController {
   selectAudioOutput(deviceId: string): void;
   /** Silence one person for this listener only. */
   toggleMutedForMe(identity: string): void;
+  /** The browser is holding the sound back until the player taps something. */
+  audioBlocked: boolean;
+  /** Lift that block. Call it from the tap itself. */
+  startAudio(): void;
   join(): void;
   leave(): void;
   toggleMicrophone(): void;
@@ -68,6 +72,7 @@ export function useMedia({
     notice: null,
     connected: false,
     reconnecting: false,
+    audioBlocked: false,
   });
   const [error, setError] = useState<string | null>(null);
   const [microphoneOn, setMicrophoneOn] = useState(false);
@@ -93,6 +98,7 @@ export function useMedia({
       notice: null,
       connected: false,
       reconnecting: false,
+      audioBlocked: false,
     });
     await open?.disconnect().catch(() => {});
   }, []);
@@ -223,6 +229,10 @@ export function useMedia({
     [snapshot.participants],
   );
 
+  const startAudio = useCallback(() => {
+    void session.current?.startAudio().catch(() => {});
+  }, []);
+
   const attachVideo = useCallback(
     (identity: string, element: HTMLVideoElement | null) =>
       session.current?.attachVideo(identity, element),
@@ -240,6 +250,8 @@ export function useMedia({
       audioOutput,
       selectAudioOutput,
       toggleMutedForMe,
+      audioBlocked: snapshot.audioBlocked,
+      startAudio,
       join,
       leave,
       toggleMicrophone,
@@ -248,6 +260,8 @@ export function useMedia({
       dismissError: () => setError(null),
     }),
     [
+      snapshot.audioBlocked,
+      startAudio,
       enabled,
       status,
       snapshot.participants,

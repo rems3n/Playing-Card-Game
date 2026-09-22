@@ -9,7 +9,30 @@ import type { MediaSnapshot } from "@/lib/media/types";
  * refused: getting it wrong told a player on a phone that their call was over
  * while their camera was still publishing to everyone else at the table.
  */
-const room = vi.hoisted(() => ({ switchFails: true, connectFails: false }));
+const room = vi.hoisted(() => ({
+  switchFails: true,
+  connectFails: false,
+  playbackAllowed: true,
+  /** The most recent Room, so a test can raise SDK events on it. */
+  last: null as null | { emit(event: string, ...args: unknown[]): void },
+}));
+
+/** A remote audio track as the SDK hands it over: attach makes an element. */
+function audioTrack(sid: string) {
+  const elements: HTMLMediaElement[] = [];
+  return {
+    kind: "audio",
+    sid,
+    attach() {
+      const element = document.createElement("audio");
+      elements.push(element);
+      return element;
+    },
+    detach() {
+      return elements.splice(0);
+    },
+  };
+}
 
 vi.mock("livekit-client", () => {
   class Room {
@@ -30,8 +53,22 @@ vi.mock("livekit-client", () => {
       setCameraEnabled: async () => {},
     };
     remoteParticipants = new Map();
-    on() {
+    handlers = new Map<string, Array<(...args: unknown[]) => void>>();
+    on(event: string, handler: (...args: unknown[]) => void) {
+      this.handlers.set(event, [...(this.handlers.get(event) ?? []), handler]);
       return this;
+    }
+    emit(event: string, ...args: unknown[]) {
+      for (const handler of this.handlers.get(event) ?? []) handler(...args);
+    }
+    get canPlaybackAudio() {
+      return room.playbackAllowed;
+    }
+    startAudio = async () => {
+      if (!room.playbackAllowed) throw new Error("autoplay blocked");
+    };
+    constructor() {
+      room.last = this;
     }
     async connect() {
       if (room.connectFails) throw new Error("no route to host");
@@ -47,7 +84,7 @@ vi.mock("livekit-client", () => {
   return {
     Room,
     RoomEvent: new Proxy({}, { get: (_target, key) => String(key) }),
-    Track: { Source: { Camera: "camera" } },
+    Track: { Source: { Camera: "camera" }, Kind: { Audio: "audio", Video: "video" } },
     ConnectionState: {
       Connected: "connected",
       Reconnecting: "reconnecting",
@@ -80,6 +117,77 @@ async function connected() {
 beforeEach(() => {
   room.switchFails = true;
   room.connectFails = false;
+  room.playbackAllowed = true;
+  document.body.innerHTML = "";
+});
+
+describe("hearing the call", () => {
+  it("plays a subscribed audio track and stops it when it goes", async () => {
+    const { session, last } = await connected();
+    // Nothing plays on its own: an audio track has to be attached somewhere.
+    expect(document.querySelectorAll("audio")).toHaveLength(0);
+    const voice = audioTrack("TR_voice");
+    room.last!.emit("TrackSubscribed", voice);
+    const playing = document.querySelectorAll("audio");
+    expect(playing).toHaveLength(1);
+    // Out of sight but in the document, so no browser garbage-collects it.
+    expect(playing[0].closest("[aria-hidden=true]")).not.toBeNull();
+    expect(last().connected).toBe(true);
+
+    room.last!.emit("TrackUnsubscribed", voice);
+    expect(document.querySelectorAll("audio")).toHaveLength(0);
+
+    room.last!.emit("TrackSubscribed", audioTrack("TR_again"));
+    expect(document.querySelectorAll("audio")).toHaveLength(1);
+    await session.disconnect();
+    expect(document.querySelectorAll("audio")).toHaveLength(0);
+  });
+
+  it("shows a camera only once its track has arrived", async () => {
+    const { last } = await connected();
+    // Published, not yet subscribed: what a phone sees for a moment after
+    // the other person turns their camera on.
+    const publication: { isMuted: boolean; track?: object } = { isMuted: false };
+    const other = {
+      identity: "seat-1",
+      name: "Ada",
+      isMicrophoneEnabled: true,
+      isCameraEnabled: true,
+      getTrackPublication: () => publication,
+    };
+    (room.last as unknown as { remoteParticipants: Map<string, unknown> }).remoteParticipants.set("seat-1", other);
+    room.last!.emit("ActiveSpeakersChanged", []);
+    expect(last().participants.find((p) => p.identity === "seat-1")?.cameraOn).toBe(false);
+
+    publication.track = {};
+    room.last!.emit("TrackSubscribed", { kind: "video", sid: "TR_cam", attach: () => document.createElement("video"), detach: () => [] });
+    expect(last().participants.find((p) => p.identity === "seat-1")?.cameraOn).toBe(true);
+  });
+
+  it("ignores video when deciding what to play", async () => {
+    await connected();
+    room.last!.emit("TrackSubscribed", { kind: "video", sid: "TR_cam", attach: () => document.createElement("video"), detach: () => [] });
+    expect(document.querySelectorAll("audio")).toHaveLength(0);
+  });
+
+  it("says when the browser is holding the sound back, and lifts it on request", async () => {
+    room.playbackAllowed = false;
+    const { session, last } = await connected();
+    expect(last().audioBlocked).toBe(true);
+    expect(last().connected).toBe(true);
+    // The tap that lifts the block arrives as a status change from the SDK.
+    room.playbackAllowed = true;
+    await session.startAudio();
+    expect(last().audioBlocked).toBe(false);
+  });
+
+  it("reflects a block the SDK reports after joining", async () => {
+    const { last } = await connected();
+    expect(last().audioBlocked).toBe(false);
+    room.playbackAllowed = false;
+    room.last!.emit("AudioPlaybackStatusChanged");
+    expect(last().audioBlocked).toBe(true);
+  });
 });
 
 describe("the LiveKit adapter", () => {

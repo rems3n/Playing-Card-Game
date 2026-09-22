@@ -9,7 +9,8 @@
     "clean": "rm -rf .next",
     "test": "vitest run",
     "qa:mobile": "node qa/mobile-layout.mjs",
-    "qa:lobby": "node qa/lobby-flows.mjs"
+    "qa:lobby": "node qa/lobby-flows.mjs",
+    "qa:call": "node qa/call-flows.mjs"
   },
   "dependencies": {
     "@card-game/shared-socket": "*",

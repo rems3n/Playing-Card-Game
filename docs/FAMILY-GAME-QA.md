@@ -42,6 +42,12 @@ row, so a mis-tap is visible and recoverable.
 | A pass displays as -1 | Internal pass sentinel is rendered directly | Display Pass. |
 | A malformed bid silently becomes zero | Socket handler coerced a non-number to 0 | Reject non-integer/non-number submissions; engine validates bounds and dealer restriction. |
 | Intermediate bot bids arrive together | AI scheduler only broadcast card plays | Persist and broadcast each bid/trump decision. |
+| Call has video but no sound, both directions | Remote audio tracks were never attached to an element | Attach on subscribe into a hidden container; detach on unsubscribe and leave; `startAudio()` after joining and a Turn on sound control where the browser holds playback back. `qa:call` measures signal on both sides. |
+| Other person's tile blank on a phone | A camera counted as on when published, before this browser subscribed, so the tile attached nothing | A camera is on once its track is here. |
+| Speaker picker on an iPhone does nothing | iOS exposes `setSinkId` but routes sound itself | No picker on iPhone/iPad or at phone widths. |
+| Table clipped and panned after tapping the picker | iOS zooms in on a form control under 16px and stays zoomed | Controls are 16px on phones. |
+| Bidding card covers the rows above and below it with video up | Full call panel left the felt 67px tall | In-call strip ≤150px; bidding form drops to essentials while a call is up; a too-tall card scrolls inside its space instead of spilling. |
+| Ready button off the edge on a 320px phone | Waiting-room grid track `1fr` would not shrink below a row's content, widening the layout to 370px | `minmax(0, 1fr)`; rows may shrink. The lobby suite now checks a 320px layout stays 320px. |
 
 ## Automated acceptance coverage
 

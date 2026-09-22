@@ -99,6 +99,16 @@ const roomField = await invite.getByLabel('Room code').inputValue();
 check(roomField === roomId, 'the room code field shows the code');
 const overflow = await guest.page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1);
 check(!overflow, 'the lobby does not scroll sideways on a phone');
+// A phone widens its layout viewport to fit anything that cannot shrink, so
+// at the smallest size the check is that the viewport stayed the size asked.
+// The guest is resized rather than a third browser seated: an extra seat
+// would leave someone never ready, and Start would never enable again.
+await guest.page.setViewportSize({ width: 320, height: 568 });
+await guest.page.waitForTimeout(600);
+const laidOut = await guest.page.evaluate(() => innerWidth);
+check(laidOut === 320, `a 320px phone lays the room out at 320px (got ${laidOut})`);
+await guest.page.setViewportSize({ width: 390, height: 780 });
+await guest.page.waitForTimeout(400);
 
 // Host frees the guest's seat, then the guest rejoins and readies again
 await host.page.locator('.waiting-seat').nth(1).getByRole('button', { name: 'Free seat' }).click();

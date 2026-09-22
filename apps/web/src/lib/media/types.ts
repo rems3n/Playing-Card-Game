@@ -21,6 +21,11 @@ export interface MediaSession {
   setAudioOutput(deviceId: string): Promise<void>;
   /** Silence one person for this listener only; nobody else is affected. */
   setMutedForMe(identity: string, muted: boolean): Promise<void>;
+  /**
+   * Ask the browser to play the call's audio. Needed where autoplay was
+   * blocked; must run inside a user gesture to succeed there.
+   */
+  startAudio(): Promise<void>;
   /** Render a participant's video into an element, or clear it with null. */
   attachVideo(identity: string, element: HTMLVideoElement | null): void;
   /** Called on every change of participants or connection state. */
@@ -44,6 +49,11 @@ export interface MediaSnapshot {
   notice: string | null;
   connected: boolean;
   reconnecting: boolean;
+  /**
+   * The browser is holding the call's sound back until the player taps
+   * something. Video may already be showing while this is true.
+   */
+  audioBlocked: boolean;
 }
 
 export type MediaSessionFactory = () => Promise<MediaSession>;

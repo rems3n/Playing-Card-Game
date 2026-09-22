@@ -1337,8 +1337,20 @@ input::placeholder {
   .waiting-page {
     padding: 18px;
   }
+  /* minmax(0, 1fr), not 1fr: a bare 1fr will not go below its content's
+     minimum, so one row a panel could not wrap widened a 320px phone's whole
+     layout to 370px and put the Ready button off the edge. */
   .waiting-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .seats-panel,
+  .invitation-panel {
+    min-width: 0;
+    padding: 18px;
+  }
+  .waiting-actions .button,
+  .invite-channels button {
+    min-width: 0;
   }
   .invitation-panel {
     grid-row: 1;
@@ -1512,6 +1524,14 @@ input::placeholder {
 .room-name-form label {
   max-width: 280px;
   flex: 1;
+  /* A text input is born ~20 characters wide and, as a flex item, would
+     refuse to shrink below that. With the button beside it that came to
+     370px, and a 320px phone widened its whole layout to match. */
+  min-width: 0;
+}
+.room-name-form input {
+  width: 100%;
+  min-width: 0;
 }
 
 /* Family-game interaction and completed-trick review. */
@@ -1732,6 +1752,10 @@ input::placeholder {
 .table-menu-actions { display: flex; gap: 10px; margin: 18px 0; }
 .table-menu-panel .score-panel { border: 1px solid var(--border-subtle); }
 @media (max-width: 1000px) {
+  /* iOS zooms the page in when a form control under 16px takes focus and
+     does not zoom back out, which clips the table on the right and leaves
+     it panned. Sixteen pixels is the size at which it leaves the page alone. */
+  input, select, textarea { font-size: 16px; }
   body:has(.game-page) { overflow: hidden; overscroll-behavior: none; }
   .app-shell:has(.game-page) { min-height: 0; }
   .app-shell:has(.game-page) > .site-header { display: none; }
@@ -1782,7 +1806,11 @@ input::placeholder {
   .opponent-score strong { font-size: 12px; }
   .opponent-score strong small { display: inline; font-size: 8px; }
   .opponent-score > small { display: none; }
-  .trick-space { flex: 1; min-height: 0; padding: 6px 0; }
+  /* Centred while there is room; pinned to the top and scrolling inside its
+     own space when there is not, instead of spilling over the rows around it. */
+  .trick-space { flex: 1; min-height: 0; padding: 6px 0; align-items: flex-start; overflow-y: auto; overscroll-behavior: contain; }
+  .trick-space > * { margin-top: auto; margin-bottom: auto; }
+  .trick-space > .bid-surface { flex: 0 0 auto; }
   .trick-cards { gap: 8px; }
   .trick-play { max-width: 55px; gap: 4px; }
   .trick-play .face-card { width: 44px; height: 64px; }
@@ -1831,6 +1859,22 @@ input::placeholder {
   .game-page > .result-panel { flex: 1; min-height: 0; overflow: auto; margin: 0; padding: 16px; }
   .native-dialog { max-height: calc(100dvh - 24px); width: min(94vw, 520px); }
   .native-dialog > section { max-height: calc(100dvh - 24px); overflow: auto; }
+}
+/* A call on screen costs the table the same rows a short screen does, so the
+   bidding form drops to its essentials -- tiles and Submit -- whenever a call
+   panel is open, not only when the screen itself is short. Otherwise, on a
+   phone with two videos up, the form ran to 284px in a 173px space. */
+@media (max-width: 1000px) {
+  .game-page:has(.media-panel.in-call.open) .bidding-panel #bid-help,
+  .game-page:has(.media-panel.in-call.open) .bidding-panel h2,
+  .game-page:has(.media-panel.in-call.open) .bidding-panel .bid-restriction,
+  .game-page:has(.media-panel.in-call.open)[data-phase="bidding"] .my-seat,
+  .game-page:has(.media-panel.in-call.open)[data-phase="bidding"] .opponent small { display: none; }
+  .game-page:has(.media-panel.in-call.open) .bid-surface { padding: 6px; }
+  .game-page:has(.media-panel.in-call.open) .bidding-panel { padding: 8px; }
+  .game-page:has(.media-panel.in-call.open) .bid-options { margin: 4px 0; gap: 5px; }
+  .game-page:has(.media-panel.in-call.open) .bidding-panel .button { margin-top: 5px; }
+  .game-page:has(.media-panel.in-call.open) .trick-space { padding: 3px 0; }
 }
 @media (max-width: 1000px) and (max-height: 650px) {
   .game-page { gap: 3px; padding-top: max(2px, env(safe-area-inset-top)); padding-bottom: max(4px, env(safe-area-inset-bottom)); }
@@ -2074,6 +2118,75 @@ input::placeholder {
      copy of it would be the same button twice, one above the other. */
   .media-panel .media-toggle {
     display: none;
+  }
+  /* Hidden while in a call: the header says Show call, the sound carries on,
+     and the table gets its full height back. Nothing else is drawn. */
+  .media-panel.in-call:not(.open) {
+    display: none;
+  }
+  /* In a call the panel is a strip, not a page: one scrolling row of
+     thumbnails and one row of controls. With two people's video up, the
+     full panel left a bidding card 110px tall a 67px space, so it covered the
+     rows above and below it. */
+  .media-panel.open .media-status {
+    display: none;
+  }
+  .media-panel.open .media-body {
+    gap: 6px;
+  }
+  .media-panel.in-call .media-tiles {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    gap: 6px;
+    padding-bottom: 2px;
+    scroll-snap-type: x proximity;
+  }
+  .media-panel.in-call .media-tile {
+    flex: 0 0 auto;
+    width: 76px;
+    height: 57px;
+    min-height: 0;
+    aspect-ratio: auto;
+    scroll-snap-align: start;
+  }
+  .media-panel.in-call .media-tile.pinned {
+    width: 104px;
+    height: 78px;
+  }
+  /* In-call controls share one row. The join state keeps its own layout:
+     shrinking that button too left it 20px wide in landscape. */
+  .media-panel.in-call .media-controls {
+    flex-wrap: nowrap;
+    gap: 6px;
+  }
+  .media-panel.in-call .media-controls .button {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 8px 6px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .media-controls .button.primary {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  .media-leave {
+    margin-left: 0;
+  }
+  /* A phone routes its own sound (speaker, headphones, Bluetooth); a page
+     cannot, so the choice is not offered there. Scoped to the panel so it
+     outranks the base rule declared later in this file. */
+  .media-panel .media-output {
+    display: none;
+  }
+  .media-panel.in-call .media-note {
+    display: none;
+  }
+  .media-unblock,
+  .media-mute-one {
+    min-height: 44px;
   }
   .media-panel.open {
     /* Capped so the felt shrinks instead of the hand dock moving off screen. */

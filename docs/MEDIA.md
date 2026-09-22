@@ -79,6 +79,16 @@ Layout, which the phone-viewport suite checks at 320x568 through 844x390:
 
 - Desktop: a collapsible panel at the top of the right-hand column. The table
   stays the primary surface and closing the call changes nothing else.
+- Phone, portrait, in a call: the panel is a strip, not a page — one
+  horizontally scrolling row of 76×57 thumbnails (a pinned one is 104×78) and
+  one row of Mute, Camera and Leave — about 125–150px in all. The status line
+  and the note are not drawn; the count is on the header button. With the
+  full panel, two people's video left a bidding card 110px tall a 67px space
+  and it covered the rows above and below. While a call is up, the bidding form
+  also drops to its essentials (tiles and Submit) as it does on a short screen,
+  so a player who must bid still gets the whole form on screen: 182px in a
+  207px space at 402×682. If a space is ever too short, the card scrolls inside
+  it rather than spilling over the table.
 - Phone, portrait: the call is opened with the **Call** button in the table
   header, beside Table. That button is the whole reason a player finds the call
   at all: the panel is not drawn until it is opened, so before the header button
@@ -92,6 +102,31 @@ Layout, which the phone-viewport suite checks at 320x568 through 844x390:
   felt, anchored left and width-capped so it cannot reach the hand column.
 - `adaptiveStream` and `dynacast` are on, so the SFU drops video layers before
   audio when a phone's connection degrades.
+
+### Hearing the call
+
+Sound is not automatic. A subscribed audio track plays only once it is attached
+to an element, and nothing in the SDK does that for you. The first live test
+had video both ways and no sound either way for exactly this reason: no
+`<audio>` element existed on either side. The adapter now attaches every
+remote audio track as it arrives, into a hidden container in the document (an
+element outside the document can be collected or paused by a browser), and
+detaches it when the track goes or the call ends. Local audio is never attached,
+which would echo.
+
+A browser may still hold playback back until the player taps something.
+Joining is a tap, so `startAudio()` runs right after connecting; if the browser
+still refuses, the snapshot's `audioBlocked` is true and the panel shows
+**Turn on sound**, which calls it again from the tap. `AudioPlaybackStatusChanged`
+keeps the flag honest afterwards.
+
+A camera counts as on only once its track has been subscribed, not when it is
+published: a tile drawn in that gap had nothing to attach, and a phone showed
+the other person's tile blank.
+
+Hiding the call on a phone keeps the sound: the attached elements live outside
+the panel, so the table gets its height back and the conversation carries on.
+Leaving removes every element.
 
 ### Failures never lie about what is being published
 
@@ -110,9 +145,16 @@ one field:
 Rejoining after any failure re-asks the server: the guard on joining is whether
 a call is actually live, not a flag a failure could leave set.
 
-Choosing an audio output needs `setSinkId`, which iOS does not have. The output
-list is empty where it is missing, so the table never offers a control that can
-only fail.
+Choosing an audio output needs `setSinkId`. iOS exposes it and still routes sound
+itself (speaker, headphones, Bluetooth), so the picker appeared on an iPhone
+and did nothing. The output list is now empty on iPhone and iPad as well as
+where `setSinkId` is missing, and the panel hides the picker on every phone
+width: a phone routes its own sound and a page cannot. It remains on desktop,
+where it works.
+
+Form controls on phones are 16px: iOS zooms the page in when a smaller control
+takes focus and does not zoom back out, which is what a clipped, panned table
+after tapping the picker looked like.
 
 ## Variables
 
@@ -162,7 +204,20 @@ the grants a real player gets and prints them, then calls the LiveKit API with
 the same key and secret — a read, so no room is created and nothing is recorded.
 It distinguishes a rejected key from a host it could not reach, and says which.
 
-That leaves one thing it cannot do: two people hearing each other. Open the
+`npm run qa:call` in `apps/web` goes further: two real browsers with Chromium's
+fake camera and microphone, a host on a desktop viewport and a guest on a
+phone, at one table against a real LiveKit server (`livekit-server --dev`
+on `ws://127.0.0.1:7880` with `devkey`/`secret`; point the game server at it
+with `MEDIA_PROVIDER=livekit`). It joins both, turns both cameras and
+microphones on, and fails unless each side has the other's audio element
+playing with measurable signal in it, both cameras showing, the phone layout
+holding with two videos up (no page scroll, Leave on screen, the panel under
+30% of the screen, the bidding form fitting its space, no speaker picker,
+every control a full touch target), sound continuing after Hide call, and
+nothing left playing after Leave. It passes at 320×568, 390×664 and 402×682.
+
+That leaves one thing it cannot do: two people hearing each other on their own
+devices. Open the
 table in two browsers (or a browser and a phone), join as different players,
 and start the call from the table menu. Check both directions of audio, mute,
 and that leaving the table ends the call.

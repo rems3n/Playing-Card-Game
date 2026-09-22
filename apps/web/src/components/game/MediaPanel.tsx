@@ -151,6 +151,15 @@ export function MediaPanel({
           )}
           {inCall ? (
             <>
+              {media.audioBlocked && (
+                <button
+                  type="button"
+                  className="button primary media-unblock"
+                  onClick={media.startAudio}
+                >
+                  Turn on sound
+                </button>
+              )}
               <div className="media-tiles">
                 {media.participants.map((person) => (
                   <Tile

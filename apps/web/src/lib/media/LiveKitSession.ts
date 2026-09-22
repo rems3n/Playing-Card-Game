@@ -12,6 +12,16 @@ import type { MediaSession, MediaSnapshot } from "./types";
  * Everything here is defensive: a failure turns into an error on the snapshot,
  * never an exception into the game UI.
  */
+/** iPhone and iPad, including an iPad that presents itself as a Mac. */
+function isApplePhoneOrTablet(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent ?? "";
+  return (
+    /iP(hone|ad|od)/.test(ua) ||
+    (/Macintosh/.test(ua) && (navigator.maxTouchPoints ?? 0) > 1)
+  );
+}
+
 export async function createLiveKitSession(): Promise<MediaSession> {
   const { Room, RoomEvent, Track, ConnectionState } = await import(
     "livekit-client"
@@ -23,6 +33,39 @@ export async function createLiveKitSession(): Promise<MediaSession> {
   // ended while their camera was still publishing to everyone else.
   let error: string | null = null;
   let notice: string | null = null;
+  // Sound is not automatic. A subscribed audio track plays only once it is
+  // attached to an element, and a browser may still hold playback back until
+  // the player taps something. Without both, a call is video only.
+  let audioBlocked = false;
+  const audioElements = new Map<string, HTMLMediaElement[]>();
+  let audioHost: HTMLElement | null = null;
+  const playAudio = (track: { sid?: string; attach(): HTMLMediaElement }) => {
+    if (typeof document === "undefined") return;
+    if (!audioHost) {
+      audioHost = document.createElement("div");
+      audioHost.setAttribute("aria-hidden", "true");
+      audioHost.style.display = "none";
+      document.body.appendChild(audioHost);
+    }
+    const element = track.attach();
+    audioHost.appendChild(element);
+    const key = track.sid ?? String(audioElements.size);
+    audioElements.set(key, [...(audioElements.get(key) ?? []), element]);
+  };
+  const stopAudio = (track: { sid?: string; detach(): HTMLMediaElement[] }) => {
+    for (const element of track.detach()) element.remove();
+    if (track.sid) audioElements.delete(track.sid);
+  };
+  const stopAllAudio = () => {
+    for (const elements of audioElements.values())
+      for (const element of elements) {
+        element.pause();
+        element.remove();
+      }
+    audioElements.clear();
+    audioHost?.remove();
+    audioHost = null;
+  };
   const listeners = new Set<(snapshot: MediaSnapshot) => void>();
   const speaking = new Set<string>();
   const mutedForMe = new Set<string>();
@@ -41,13 +84,17 @@ export async function createLiveKitSession(): Promise<MediaSession> {
       ];
       for (const person of all) {
         const isLocal = person === room.localParticipant;
+        // A camera counts as on only once its track is here. It is published
+        // before this browser subscribes, and a tile drawn in that gap had
+        // nothing to attach, so a phone showed the other person's tile blank.
+        const camera = person.getTrackPublication(Track.Source.Camera);
         people.push({
           identity: person.identity,
           seatIndex: seatOf(person.identity),
           displayName: person.name || person.identity,
           isLocal,
           microphoneOn: person.isMicrophoneEnabled,
-          cameraOn: person.isCameraEnabled,
+          cameraOn: !!camera && !camera.isMuted && !!camera.track,
           speaking: speaking.has(person.identity),
           mutedForMe: mutedForMe.has(person.identity),
           connection:
@@ -66,6 +113,7 @@ export async function createLiveKitSession(): Promise<MediaSession> {
       notice,
       connected: state === ConnectionState.Connected,
       reconnecting: state === ConnectionState.Reconnecting,
+      audioBlocked,
     };
   }
   const publish = () => {
@@ -95,6 +143,17 @@ export async function createLiveKitSession(): Promise<MediaSession> {
         .on(RoomEvent.ConnectionStateChanged, publish)
         .on(RoomEvent.Reconnecting, publish)
         .on(RoomEvent.Reconnected, publish);
+      // Remote sound: attach when it arrives, detach when it goes.
+      room.on(RoomEvent.TrackSubscribed, (track) => {
+        if (track.kind === Track.Kind.Audio) playAudio(track);
+      });
+      room.on(RoomEvent.TrackUnsubscribed, (track) => {
+        if (track.kind === Track.Kind.Audio) stopAudio(track);
+      });
+      room.on(RoomEvent.AudioPlaybackStatusChanged, () => {
+        audioBlocked = !room?.canPlaybackAudio;
+        publish();
+      });
       room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
         speaking.clear();
         for (const speaker of speakers) speaking.add(speaker.identity);
@@ -106,6 +165,9 @@ export async function createLiveKitSession(): Promise<MediaSession> {
       });
       try {
         await room.connect(credentials.url, credentials.token);
+        // Joining is a tap, so this usually lifts the autoplay block at once.
+        await room.startAudio().catch(() => {});
+        audioBlocked = !room.canPlaybackAudio;
       } catch (cause) {
         error =
           cause instanceof Error
@@ -120,6 +182,8 @@ export async function createLiveKitSession(): Promise<MediaSession> {
       room = null;
       error = null;
       notice = null;
+      audioBlocked = false;
+      stopAllAudio();
       speaking.clear();
       mutedForMe.clear();
       publish();
@@ -148,12 +212,14 @@ export async function createLiveKitSession(): Promise<MediaSession> {
       publish();
     },
     async listAudioOutputs(): Promise<MediaDevice[]> {
-      // Choosing an output needs setSinkId. iOS enumerates outputs it will not
-      // switch to, so without this check the table offers a control that can
-      // only fail, which is how a harmless tap came to look like a dropped call.
+      // Choosing an output needs setSinkId, and even where iOS exposes it the
+      // system routes sound itself (speaker, headphones, Bluetooth), so a page
+      // cannot. Offering a control that can only fail is how a harmless tap
+      // once looked like a dropped call.
       if (
         typeof HTMLMediaElement === "undefined" ||
-        !("setSinkId" in HTMLMediaElement.prototype)
+        !("setSinkId" in HTMLMediaElement.prototype) ||
+        isApplePhoneOrTablet()
       )
         return [];
       try {
@@ -178,6 +244,16 @@ export async function createLiveKitSession(): Promise<MediaSession> {
             ? `Could not switch the speaker: ${cause.message}`
             : "Could not switch the speaker.";
       }
+      publish();
+    },
+    async startAudio() {
+      if (!room) return;
+      try {
+        await room.startAudio();
+      } catch {
+        // The status event below says whether it worked.
+      }
+      audioBlocked = !room.canPlaybackAudio;
       publish();
     },
     async setMutedForMe(identity: string, muted: boolean) {

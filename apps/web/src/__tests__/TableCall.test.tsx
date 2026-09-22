@@ -72,6 +72,7 @@ function fakeSession() {
     attached: [] as Array<[string, boolean]>,
     outputs: [] as string[],
     mutedForMe: [] as Array<[string, boolean]>,
+    startAudio: 0,
   };
   let outputs = [
     { deviceId: "default", label: "Phone speaker" },
@@ -83,6 +84,7 @@ function fakeSession() {
     notice: null,
     connected: false,
     reconnecting: false,
+    audioBlocked: false,
   };
   // The real session refuses to switch the speaker on browsers without
   // setSinkId, which is what a phone does.
@@ -124,6 +126,10 @@ function fakeSession() {
       calls.outputs.push(deviceId);
       if (outputFails)
         publish({ notice: "Could not switch the speaker: not supported." });
+    },
+    async startAudio() {
+      calls.startAudio++;
+      publish({ audioBlocked: false });
     },
     async setMutedForMe(identity, muted) {
       calls.mutedForMe.push([identity, muted]);
@@ -219,6 +225,23 @@ describe("the table call", () => {
     expect(fake.calls.disconnect).toBe(0);
     expect(fake.connected).toBe(true);
     expect(fake.calls.camera).toEqual([true]);
+  });
+
+  it("offers to turn the sound on where the browser holds it back", async () => {
+    const fake = fakeSession();
+    const user = await joinCall(fake);
+    expect(screen.queryByRole("button", { name: "Turn on sound" })).toBeNull();
+    // Video can be up while a phone still refuses to play the audio.
+    await act(async () => {
+      fake.publish({ audioBlocked: true });
+    });
+    const button = await screen.findByRole("button", { name: "Turn on sound" });
+    expect(screen.getByRole("status").textContent).toContain("in the call");
+    await user.click(button);
+    await waitFor(() => expect(fake.calls.startAudio).toBe(1));
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Turn on sound" })).toBeNull(),
+    );
   });
 
   it("really leaves the room whenever it says the call is not connected", async () => {

@@ -43,6 +43,19 @@ long run fail for reasons that have nothing to do with the layout. The suite
 hides the dev indicator, but it cannot hide a reload. Do not edit files while a
 run is in progress.
 
+### `npm run qa:call` — a real two-person call
+
+`qa/call-flows.mjs` drives a host on a desktop viewport and a guest on a phone
+through the waiting room to one table, both with Chromium's fake camera and
+microphone, against a real LiveKit server. It measures that the other person's
+audio element is playing with signal in it on both sides, that both cameras
+show, that the phone layout holds with two videos up, that hiding the call
+keeps the sound and leaving ends it. It needs a LiveKit server this machine can
+reach — `livekit-server --dev` on `ws://127.0.0.1:7880` — and the game server
+started with `MEDIA_PROVIDER=livekit LIVEKIT_URL=ws://127.0.0.1:7880
+LIVEKIT_API_KEY=devkey LIVEKIT_API_SECRET=secret`. `PHONE=320x568` picks the
+guest's viewport (default `402x682`, an iPhone 16 Pro in Safari).
+
 Environment variables: `BASE_URL` (default `http://localhost:3000`), `SEATS`
 (default 7), `GAME` (`Seven-Six` or `45s`), `SIZES` (comma-separated,
 e.g. `320x568,844x390`), `MIN_TOUCH`, `MIN_HAND_CARD`, `CHROMIUM_PATH`.
