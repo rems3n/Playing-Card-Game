@@ -73,6 +73,45 @@ describe("Seven-Six bidding controls", () => {
     await user.click(screen.getByRole("button", { name: "Select bid 7" }));
     expect(screen.getByRole("button", { name: "Submit bid: 7" })).toBeTruthy();
   });
+  it("preselects no bid and keeps submission disabled until one is chosen", async () => {
+    const { onBid } = setup();
+    const user = userEvent.setup();
+    const submit = screen.getByRole("button", {
+      name: "Submit bid",
+    }) as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    expect(
+      screen.queryByRole("button", { name: /Select bid \d/, pressed: true }),
+    ).toBeNull();
+    await user.click(submit);
+    expect(onBid).not.toHaveBeenCalled();
+    fireEvent.submit(submit.closest("form")!);
+    expect(onBid).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Select bid 4" }));
+    expect(
+      (screen.getByRole("button", { name: "Submit bid: 4" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+  });
+  it("clears a selection the dealer restriction makes illegal", async () => {
+    const { onBid, props, rerender } = setup({ dealerSeat: 0 });
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Select bid 3" }));
+    expect(screen.getByRole("button", { name: "Submit bid: 3" })).toBeTruthy();
+    // Earlier bids now total 4, so the dealer may no longer bid 3.
+    rerender(
+      <BiddingPanel
+        {...props}
+        gameState={{ ...props.gameState, bids: [null, 2, 1, 1] }}
+      />,
+    );
+    const submit = screen.getByRole("button", {
+      name: "Submit bid",
+    }) as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    fireEvent.submit(submit.closest("form")!);
+    expect(onBid).not.toHaveBeenCalled();
+  });
   it("does not submit again while a bid is pending", () => {
     const { onBid, props, rerender } = setup();
     rerender(<BiddingPanel {...props} pending />);

@@ -336,7 +336,7 @@ export function RulesModal({ gameType, open, onClose }: RulesModalProps) {
         <div className="px-5 py-3 border-t border-[var(--border-subtle)] shrink-0">
           <button
             onClick={onClose}
-            className="w-full py-2 text-[13px] font-medium bg-[var(--accent-green)] text-white rounded-lg hover:brightness-110 transition-all"
+            className="w-full min-h-[46px] py-2 text-[14px] font-medium bg-[var(--accent-green)] text-white rounded-lg hover:brightness-110 transition-all touch-manipulation"
           >
             Got it
           </button>

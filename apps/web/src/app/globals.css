@@ -1680,8 +1680,8 @@ input::placeholder {
 .trump-panel p { margin: 0; }
 .trump-panel .eyebrow { color: #705319; }
 .trump-panel .face-card { width: 64px; height: 94px; }
-.auto-deal-control { display: flex; flex-direction: row; gap: 12px; align-items: center; padding: 12px 0 18px; cursor: pointer; }
-.auto-deal-control input { width: 22px; height: 22px; min-height: 22px; padding: 0; flex: 0 0 auto; accent-color: #2d6447; }
+.auto-deal-control { display: flex; flex-direction: row; gap: 12px; align-items: center; padding: 12px 0 18px; cursor: pointer; min-height: 46px; touch-action: manipulation; }
+.auto-deal-control input { width: 26px; height: 26px; min-height: 26px; padding: 0; flex: 0 0 auto; accent-color: #2d6447; }
 .auto-deal-control small { display: block; color: var(--text-secondary); font-size: 12px; }
 .round-result { padding: 24px; margin-bottom: 12px; }
 .round-result h2 { font-size: 24px; }
@@ -1717,6 +1717,7 @@ input::placeholder {
 /* Phone game shell: navigation and secondary information never displace play. */
 .mobile-table-action { display: none; }
 .table-menu-panel { padding: 18px; max-height: 85dvh; overflow: auto; }
+.table-menu-heading { position: sticky; top: -18px; z-index: 1; background: inherit; padding: 6px 0; }
 .table-menu-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
 .table-menu-heading h2 { font-size: 24px; }
 .table-menu-panel .auto-deal-control { margin: 18px 0; }
@@ -1791,14 +1792,15 @@ input::placeholder {
   .bidding-panel { padding: 10px; border-radius: 10px; }
   .bidding-panel h2 { font-size: 15px; margin: 0 0 5px; }
   .bidding-panel p { font-size: 11px; line-height: 1.3; margin: 4px 0; }
-  .bid-options { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px; margin: 8px 0; }
-  .bid-options button { min-width: 0; min-height: 44px; padding: 0; font-size: 16px; }
+  /* Wrap onto a second row rather than shrinking tiles below a 46px target. */
+  .bid-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(46px, 1fr)); gap: 6px; margin: 8px 0; justify-content: center; }
+  .bid-options button { min-width: 46px; min-height: 46px; padding: 0; font-size: 17px; touch-action: manipulation; }
   .bidding-panel .button { min-height: 44px; padding: 8px; margin-top: 6px; font-size: 14px; }
   .hand-panel { flex: 0 0 auto; padding: 8px; }
   .hand-heading { font-size: 11px; margin: 0 0 3px; }
   .hand-heading small { display: none; }
   .hand-cards { flex-wrap: nowrap; min-height: 0; gap: 4px; padding: 7px 0; }
-  .hand-cards .face-card { width: min(52px, calc((100vw - 60px) / 7)); height: auto; aspect-ratio: 9 / 13; }
+  .hand-cards .face-card { width: min(52px, calc((100vw - 60px) / 7)); height: auto; aspect-ratio: 9 / 13; touch-action: manipulation; }
   .hand-cards .card-corner { left: 4px; top: 4px; font-size: 16px; }
   .hand-cards .card-corner small { font-size: 11px; }
   .hand-cards .card-suit { font-size: 25px; }
@@ -1808,10 +1810,12 @@ input::placeholder {
   .hand-action .button { min-height: 44px; min-width: 110px; padding: 8px 12px; font-size: 13px; }
   .game-page[data-phase="bidding"] .hand-action { display: none; }
   .game-page[data-phase="round_scoring"] .felt-table { display: none; }
-  .round-result { flex: 1; min-height: 0; overflow: auto; padding: 16px; margin: 0; }
-  .round-result h2 { font-size: 20px; }
-  .round-result .button { min-height: 44px; }
-  .round-points { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 12px 0; font-size: 12px; }
+  /* Only the per-player list scrolls, so Deal next hand is always reachable. */
+  .round-result { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; padding: 16px; margin: 0; }
+  .round-result > * { flex: 0 0 auto; }
+  .round-result h2 { font-size: 20px; margin: 4px 0 8px; }
+  .round-result .button { min-height: 46px; margin-top: 10px; touch-action: manipulation; }
+  .round-points { flex: 1 1 auto; min-height: 44px; overflow-y: auto; overscroll-behavior: contain; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 10px 0; font-size: 12px; }
   .round-points li { padding: 8px; }
   .game-page[data-phase="game_over"] .table-layout { display: none; }
   .game-page > .result-panel { flex: 1; min-height: 0; overflow: auto; margin: 0; padding: 16px; }
@@ -1853,4 +1857,25 @@ input::placeholder {
   .opponents { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .trick-play .face-card { width: 35px; height: 50px; }
   .round-result { grid-column: 1 / -1; grid-row: 2; }
+}
+
+/* Narrow phones: the hand panel spans the full viewport width so a seven-card
+   hand keeps the widest possible cards. Measured at 320px, seven cards:
+   37 x 54px before, 42 x 60px after. Seven 44px cards plus readable gaps do not
+   fit 320px, so selection stays a two-step select-then-play with the chosen
+   card named in the action row. Must stay last: it overrides the
+   shorter-screen padding above. */
+@media (max-width: 400px) {
+  .hand-panel {
+    width: 100vw;
+    max-width: 100vw;
+    margin-left: calc(50% - 50vw);
+    margin-right: calc(50% - 50vw);
+    padding: 5px 4px;
+    border-left: 0;
+    border-right: 0;
+    border-radius: 10px 10px 0 0;
+  }
+  .hand-cards { gap: 3px; padding-left: 0; padding-right: 0; justify-content: center; }
+  .hand-cards .face-card { width: min(52px, calc((100vw - 28px) / 7)); }
 }

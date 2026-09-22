@@ -17,10 +17,12 @@ export function BiddingPanel({
   onCallTrump,
   pending = false,
 }: BiddingPanelProps) {
-  const [selectedBid, setSelectedBid] = useState(1);
+  const [selectedBid, setSelectedBid] = useState<number | null>(null);
   const isMyTurn = gameState.currentPlayerSeat === gameState.mySeat;
 
   if (gameState.gameType === GameType.Spades) {
+    // Legacy Spades surface: it keeps a stepper with a default of 1.
+    const spadesBid = selectedBid ?? 1;
     return (
       <div className="bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-subtle)] p-4 text-center">
         <div className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3">
@@ -50,16 +52,16 @@ export function BiddingPanel({
             </p>
             <div className="flex items-center justify-center gap-2 mb-3">
               <button
-                onClick={() => setSelectedBid(Math.max(0, selectedBid - 1))}
+                onClick={() => setSelectedBid(Math.max(0, spadesBid - 1))}
                 className="w-7 h-7 rounded bg-[var(--bg-tertiary)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] flex items-center justify-center text-sm"
               >
                 -
               </button>
               <span className="text-xl font-bold w-8 text-center tabular-nums">
-                {selectedBid}
+                {spadesBid}
               </span>
               <button
-                onClick={() => setSelectedBid(Math.min(13, selectedBid + 1))}
+                onClick={() => setSelectedBid(Math.min(13, spadesBid + 1))}
                 className="w-7 h-7 rounded bg-[var(--bg-tertiary)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] flex items-center justify-center text-sm"
               >
                 +
@@ -73,10 +75,10 @@ export function BiddingPanel({
                 Nil
               </button>
               <button
-                onClick={() => onBid(selectedBid)}
+                onClick={() => onBid(spadesBid)}
                 className="px-5 py-1.5 text-[12px] font-semibold bg-[var(--accent-green)] text-white rounded hover:brightness-110 transition-all"
               >
-                Bid {selectedBid}
+                Bid {spadesBid}
               </button>
             </div>
           </div>
@@ -103,9 +105,11 @@ export function BiddingPanel({
     const legalBids = Array.from({ length: handSize + 1 }, (_, i) => i).filter(
       (bid) => bid !== restrictedBid,
     );
-    const validBid = legalBids.includes(selectedBid)
-      ? selectedBid
-      : legalBids[0];
+    // No bid is preselected: the player must choose a number before submitting.
+    const validBid =
+      selectedBid !== null && legalBids.includes(selectedBid)
+        ? selectedBid
+        : null;
     return (
       <section className="bidding-panel" aria-label="Choose your bid">
         <h2>Bidding</h2>
@@ -113,7 +117,7 @@ export function BiddingPanel({
           <form
             onSubmit={(event) => {
               event.preventDefault();
-              if (!pending) onBid(validBid);
+              if (!pending && validBid !== null) onBid(validBid);
             }}
           >
             <p id="bid-help">
@@ -147,10 +151,14 @@ export function BiddingPanel({
             <button
               className="button primary full"
               type="submit"
-              disabled={pending}
+              disabled={pending || validBid === null}
               aria-describedby="bid-help"
             >
-              {pending ? "Submitting…" : `Submit bid: ${validBid}`}
+              {pending
+                ? "Submitting…"
+                : validBid === null
+                  ? "Submit bid"
+                  : `Submit bid: ${validBid}`}
             </button>
           </form>
         ) : (
