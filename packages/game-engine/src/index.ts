@@ -4,6 +4,7 @@ export * from './core/Card.js';
 export * from './core/Deck.js';
 export { HeartsEngine } from './games/hearts/HeartsEngine.js';
 export { SpadesEngine } from './games/spades/SpadesEngine.js';
-export { EuchreEngine } from './games/euchre/EuchreEngine.js';
+export { FortyFivesEngine } from './games/forty-fives/FortyFivesEngine.js';
+export * from './games/forty-fives/ranking.js';
 export { RummyEngine } from './games/rummy/RummyEngine.js';
 export { SevenSixEngine } from './games/seven-six/SevenSixEngine.js';

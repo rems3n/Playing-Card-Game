@@ -11,15 +11,23 @@ function storage() {
     remove: async (id: string) => { saved.delete(id); },
   };
 }
+/**
+ * One step of the bidding phase in either family game. Seven-Six takes a
+ * number of tricks; 45s runs an auction and then the winner names trump.
+ */
+async function bidStep(service: GameService, id: string, room: any, seat: number) {
+  const calls = room.engine.getLegalTrumpCalls?.(seat) ?? [];
+  if (calls.length) await service.callTrump(id, seat, calls[0]);
+  else await service.placeFamilyBid(id, seat, room.engine.getLegalBids(seat)[0]);
+}
+
 async function finishHand(service: GameService, id: string) {
   const room = (await service.getRoom(id))!;
   while (![GamePhase.RoundScoring, GamePhase.GameOver].includes(room.engine.getState().phase)) {
     const state = room.engine.getState();
     const seat = state.currentPlayerSeat;
     if (state.phase === GamePhase.Bidding) {
-      if (state.gameType === GameType.SevenSix)
-        await service.sevenSixPlaceBid(id, seat, (room.engine as any).getLegalBids(seat)[0]);
-      else await service.callTrump(id, seat, (room.engine as any).getLegalTrumpCalls(seat)[0]);
+      await bidStep(service, id, room, seat);
     } else {
       await service.playCard(id, seat, room.engine.getLegalMoves(seat)[0]);
       await service.waitForTrickReview(id);
@@ -28,7 +36,7 @@ async function finishHand(service: GameService, id: string) {
 }
 
 describe("next-hand controls", () => {
-  it.each([GameType.SevenSix, GameType.Euchre])("%s waits for a deal, restores scores and preference, and rejects stale double deals", async type => {
+  it.each([GameType.SevenSix, GameType.FortyFives])("%s waits for a deal, restores scores and preference, and rejects stale double deals", async type => {
     const store = storage();
     const service = new GameService(store, async () => {});
     const id = service.createGame(type);
@@ -49,7 +57,6 @@ describe("next-hand controls", () => {
     const recovered = await restored.getVisibleState(id, 0);
     expect(recovered).toMatchObject({ phase: GamePhase.RoundScoring, roundNumber: 0, autoDeal: true, scores: finished.scores });
     expect(recovered.trumpCard).toEqual(finished.trumpCard);
-    expect(recovered.turnedUpCard).toEqual(finished.turnedUpCard);
     await restored.setAutoDeal(id, false);
     await restored.dealNextRound(id, 0);
     const next = await restored.getVisibleState(id, 0);

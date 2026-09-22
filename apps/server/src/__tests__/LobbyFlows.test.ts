@@ -384,13 +384,13 @@ describe("sending an invitation", () => {
     expect(shown).not.toContain("account 42");
   });
 
-  it("names the game a Euchre table is actually playing", async () => {
+  it("names the game a 45s table is actually playing", async () => {
     const message = inviteMessage(
-      { id: "abcd1234", gameType: GameType.Euchre } as never,
+      { id: "abcd1234", gameType: GameType.FortyFives } as never,
       "Bo",
       "https://play.example",
     );
-    expect(message.subject).toBe("Bo invited you to a game of 45s / Euchre");
+    expect(message.subject).toBe("Bo invited you to a game of 45s");
   });
 
   it("a disabled provider never sends, whatever it is asked", async () => {

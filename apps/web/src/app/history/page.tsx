@@ -86,8 +86,8 @@ export default function HistoryPage() {
                     <strong>
                       {game.gameType === "seven-six"
                         ? "Seven-Six"
-                        : game.gameType === "euchre"
-                          ? "45s / Euchre"
+                        : game.gameType === "forty-fives"
+                          ? "45s"
                           : game.gameType}
                     </strong>
                     <small>
@@ -111,7 +111,7 @@ export default function HistoryPage() {
                           {p.displayName}
                           {p.seatPosition === game.mySeat ? " (you)" : ""}
                           {p.isAi ? " · Bot" : ""}
-                          {game.gameType === "euchre"
+                          {game.gameType === "forty-fives"
                             ? ` · Team ${(p.seatPosition % 2) + 1}`
                             : ""}
                         </span>

@@ -51,7 +51,7 @@ export function inviteMessage(
   fromName: string,
   webUrl: string,
 ) {
-  const game = room.gameType === "seven-six" ? "Seven-Six" : "45s / Euchre";
+  const game = room.gameType === "seven-six" ? "Seven-Six" : "45s";
   const link = `${webUrl.replace(/\/$/, "")}/room/${room.id}`;
   return {
     subject: `${fromName} invited you to a game of ${game}`,

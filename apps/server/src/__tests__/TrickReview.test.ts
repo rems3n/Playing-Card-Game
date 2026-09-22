@@ -21,19 +21,27 @@ function store() {
   };
 }
 
+/**
+ * One step of the bidding phase in either family game. Seven-Six takes a
+ * number of tricks; 45s runs an auction and then the winner names trump.
+ */
+async function bidStep(service: GameService, id: string, room: any, seat: number) {
+  const calls = room.engine.getLegalTrumpCalls?.(seat) ?? [];
+  if (calls.length) await service.callTrump(id, seat, calls[0]);
+  else await service.placeFamilyBid(id, seat, room.engine.getLegalBids(seat)[0]);
+}
+
 describe("completed trick presentation", () => {
   it("holds the final card for the full 3.5 seconds before enabling the next turn", async () => {
     vi.useFakeTimers();
     try {
       const service = new GameService(store());
-      const id = service.createGame(GameType.Euchre);
+      const id = service.createGame(GameType.FortyFives);
       await service.startGame(id);
       const room = (await service.getRoom(id))!;
-      await service.callTrump(
-        id,
-        1,
-        (room.engine as any).getLegalTrumpCalls(1)[0],
-      );
+      // Run the auction, then let its winner name trump.
+      while (room.engine.getState().phase === GamePhase.Bidding)
+        await bidStep(service, id, room, room.engine.getState().currentPlayerSeat);
       for (let i = 0; i < 4; i++) {
         const seat = room.engine.getState().currentPlayerSeat;
         await service.playCard(id, seat, room.engine.getLegalMoves(seat)[0]);
@@ -53,7 +61,7 @@ describe("completed trick presentation", () => {
     }
   });
 
-  it.each([GameType.SevenSix, GameType.Euchre])(
+  it.each([GameType.SevenSix, GameType.FortyFives])(
     "preserves every human-completed %s trick, including round/game boundaries",
     async (type) => {
       const storage = store();
@@ -74,15 +82,7 @@ describe("completed trick presentation", () => {
         const state = room.engine.getState(),
           seat = state.currentPlayerSeat;
         if (state.phase === GamePhase.Bidding) {
-          if (type === GameType.SevenSix) {
-            const bids = (room.engine as any).getLegalBids(seat);
-            await service.sevenSixPlaceBid(id, seat, bids[0]);
-          } else
-            await service.callTrump(
-              id,
-              seat,
-              (room.engine as any).getLegalTrumpCalls(seat)[0],
-            );
+          await bidStep(service, id, room, seat);
           continue;
         }
         if (state.phase === GamePhase.RoundScoring) {
@@ -119,7 +119,7 @@ describe("completed trick presentation", () => {
           service.playCard(id, state.currentPlayerSeat, card),
         ).rejects.toThrow("wait");
         await expect(
-          service.sevenSixPlaceBid(id, state.currentPlayerSeat, 0),
+          service.placeFamilyBid(id, state.currentPlayerSeat, 0),
         ).rejects.toThrow();
         // A new server and refreshed client still see all the cards.
         const restored = new GameService(storage, async () => {});
@@ -143,7 +143,7 @@ describe("completed trick presentation", () => {
     },
   );
 
-  it.each([GameType.SevenSix, GameType.Euchre])(
+  it.each([GameType.SevenSix, GameType.FortyFives])(
     "broadcasts and holds every bot-completed %s trick",
     async (type) => {
       const delays: number[] = [],

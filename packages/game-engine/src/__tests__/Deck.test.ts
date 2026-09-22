@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createStandardDeck, createEuchreDeck, shuffleDeck, dealCards } from '../core/Deck.js';
+import { createStandardDeck, shuffleDeck, dealCards } from '../core/Deck.js';
 
 describe('Deck', () => {
   it('creates a standard 52-card deck', () => {
@@ -9,13 +9,6 @@ describe('Deck', () => {
     // Check no duplicates
     const strings = deck.map((c) => `${c.suit}${c.rank}`);
     expect(new Set(strings).size).toBe(52);
-  });
-
-  it('creates a euchre 24-card deck (9 through Ace)', () => {
-    const deck = createEuchreDeck();
-    expect(deck).toHaveLength(24);
-    // All ranks should be >= 9
-    expect(deck.every((c) => c.rank >= 9)).toBe(true);
   });
 
   it('shuffles deterministically with a seed', () => {

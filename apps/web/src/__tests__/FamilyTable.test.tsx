@@ -145,9 +145,9 @@ describe("family table interactions", () => {
     ).toBeTruthy();
     expect(within(dialog).getByRole("group").children).toHaveLength(4);
   });
-  it("labels opponent tricks separately from points and renders Euchre passes as words", () => {
+  it("labels opponent tricks separately from points and renders a pass as a word", () => {
     const state = initial();
-    state.gameType = GameType.Euchre;
+    state.gameType = GameType.FortyFives;
     state.players[1].tricksWon = 3;
     state.bids = [null, -1, null, null];
     useGameStore.getState().setGameState(state);
@@ -176,6 +176,35 @@ describe("trump and next-hand controls", () => {
     expect(within(trump).getByRole("img", { name: "Trump card: Q of spades" })).toBeTruthy();
     expect(trump.textContent).toContain("No player can hold it");
     expect(screen.queryByRole("button", { name: "Q of spades" })).toBeNull();
+  });
+  it("describes 45s trump by the auction, never by a turned-up card", () => {
+    const state = initial();
+    state.gameType = GameType.FortyFives;
+    state.trumpSuit = Suit.Hearts;
+    state.declarerSeat = 1;
+    state.contract = 25;
+    state.trumpCard = undefined;
+    useGameStore.getState().setGameState(state);
+    render(<GameBoard />);
+    const trump = screen.getByRole("region", { name: "Trump for this hand" });
+    expect(trump.textContent).toContain("Player 1 won the auction at 25");
+    expect(trump.textContent).not.toMatch(/turned-up/i);
+    expect(trump.textContent).not.toMatch(/bidding round/i);
+    // No card is turned up in 45s, so nothing should be shown as one.
+    expect(within(trump).queryByRole("img")).toBeNull();
+  });
+  it("labels the 45s header Bidding until the auction produces a declarer", () => {
+    const state = initial();
+    state.gameType = GameType.FortyFives;
+    state.phase = GamePhase.Bidding;
+    state.trumpSuit = undefined;
+    state.legalBids = [15, 20, 25, 30, -1];
+    useGameStore.getState().setGameState(state);
+    render(<GameBoard />);
+    expect(screen.getByText(/Round 1/).textContent).toContain("Bidding");
+    expect(screen.getByText(/Round 1/).textContent).not.toContain(
+      "Choosing trump",
+    );
   });
   it("shows hand scores and requires an explicit deal without duplicate submissions", () => {
     const state = initial();

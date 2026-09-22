@@ -95,7 +95,7 @@ export class MonteCarloStrategy implements AIPlayer {
     }
 
     const allCards: Card[] = [];
-    const minRank = state.gameType === GameType.Euchre ? Rank.Nine : Rank.Two;
+    const minRank = Rank.Two;
 
     for (const suit of ALL_SUITS) {
       for (let rank = minRank; rank <= Rank.Ace; rank++) {

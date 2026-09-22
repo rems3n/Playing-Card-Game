@@ -33,7 +33,7 @@ export interface Card {
 export enum GameType {
   Hearts = "hearts",
   Spades = "spades",
-  Euchre = "euchre",
+  FortyFives = "forty-fives",
   Rummy = "rummy",
   SevenSix = "seven-six",
 }
@@ -159,10 +159,12 @@ export interface VisibleGameState {
   lastTrick?: CompletedTrick;
   /** Shared table preference, persisted for this game only. */
   autoDeal?: boolean;
-  // Euchre bidding options are supplied by the authoritative engine.
-  turnedUpCard?: Card;
-  trumpCallRound?: number;
+  // Bidding options are supplied by the authoritative engine.
   legalTrumpCalls?: Array<Suit | "pass">;
+  // Forty-Fives: the auction, and who won it.
+  legalBids?: number[];
+  declarerSeat?: number;
+  contract?: number;
   // Rummy-specific (visible to all)
   drawPileCount?: number;
   discardTop?: Card | null;

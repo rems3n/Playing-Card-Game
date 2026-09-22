@@ -5,15 +5,15 @@ import { RulesModal } from "@/components/RulesModal";
 
 const GAMES = [
   {
-    type: "euchre" as const,
-    title: "45s / Euchre",
-    tagline: "Partners, five tricks a hand, and a trump you call",
-    players: "4 players",
-    difficulty: "Partnership game",
+    type: "forty-fives" as const,
+    title: "45s",
+    tagline: "Bid for trump, then take the tricks",
+    players: "2, 4 or 6 players",
+    difficulty: "Bidding and partnerships",
     color: "var(--accent-green)",
-    icon: "♠",
+    icon: "45",
     summary:
-      "Uses the existing Euchre rules: a 24-card deck, five tricks per hand, bowers, and a target of 10 points. Seats opposite each other are partners.",
+      "Bid 15, 20, 25 or 30 for the right to name trump. Each trick is worth 5 and the highest trump another 5. The 5 of trump is the highest card, then the jack, then the ace of hearts. First side to 45 wins.",
   },
   {
     type: "seven-six" as const,
@@ -29,7 +29,7 @@ const GAMES = [
 ];
 
 export default function RulesPage() {
-  const [activeGame, setActiveGame] = useState<"seven-six" | "euchre" | null>(
+  const [activeGame, setActiveGame] = useState<"seven-six" | "forty-fives" | null>(
     null,
   );
 

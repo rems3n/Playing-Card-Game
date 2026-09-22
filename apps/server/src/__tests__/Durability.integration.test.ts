@@ -59,7 +59,7 @@ describe.skipIf(process.env.RUN_DURABILITY_TESTS !== "1")(
     });
     it("rolls back a failed result, then saves once under concurrent retries and restricts history", async () => {
       const service = new GameService(new GameStateStore(), async () => {});
-      const id = service.createGame(GameType.Euchre, { targetScore: 1 });
+      const id = service.createGame(GameType.FortyFives, { targetScore: 1 });
       gameIds.push(id);
       await service.fillWithAI(id, AIDifficulty.Beginner);
       await service.startGame(id);

@@ -52,7 +52,7 @@ export const ratings = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    gameType: varchar("game_type", { length: 20 }).notNull(), // 'hearts' | 'spades' | 'euchre'
+    gameType: varchar("game_type", { length: 20 }).notNull(), // 'seven-six' | 'forty-fives'
     rating: real("rating").default(1500).notNull(),
     ratingDeviation: real("rating_deviation").default(350).notNull(),
     volatility: real("volatility").default(0.06).notNull(),

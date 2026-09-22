@@ -77,22 +77,23 @@ export class RoomService {
     player: RoomPlayer,
   ) {
     const maxPlayers = config.maxPlayers ?? 4;
-    if (![GameType.SevenSix, GameType.Euchre].includes(gameType))
-      throw new Error("Choose Seven-Six or 45s / Euchre");
+    if (![GameType.SevenSix, GameType.FortyFives].includes(gameType))
+      throw new Error("Choose Seven-Six or 45s");
+    // Forty-Fives is played by two, four or six; Seven-Six by two to seven.
+    const fortyFives = gameType === GameType.FortyFives;
     if (
       !Number.isInteger(maxPlayers) ||
       maxPlayers < 2 ||
       maxPlayers > 7 ||
-      (gameType === GameType.Euchre && maxPlayers !== 4)
+      (fortyFives && ![2, 4, 6].includes(maxPlayers))
     )
       throw new Error("Invalid player count");
-    const targetScore =
-      gameType === GameType.Euchre ? (config.targetScore ?? 10) : 0;
+    const targetScore = fortyFives ? (config.targetScore ?? 45) : 0;
     if (
       !Number.isInteger(targetScore) ||
       targetScore < 0 ||
-      targetScore > 100 ||
-      (gameType === GameType.Euchre && targetScore < 1)
+      targetScore > 200 ||
+      (fortyFives && targetScore < 1)
     )
       throw new Error("Invalid target score");
     const room: FamilyRoom = {

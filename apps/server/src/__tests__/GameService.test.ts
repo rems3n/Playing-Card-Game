@@ -22,7 +22,7 @@ function memoryStore() {
 }
 
 describe("GameService bot scheduler", () => {
-  it.each([GameType.Euchre, GameType.SevenSix])(
+  it.each([GameType.FortyFives, GameType.SevenSix])(
     "finishes an all-bot %s game across round and bidding boundaries",
     async (gameType) => {
       const store = memoryStore();
@@ -50,7 +50,7 @@ describe("GameService bot scheduler", () => {
 
   it("stops at a human turn and rejects a stranger joining an active game", async () => {
     const service = new GameService(memoryStore(), async () => {});
-    const id = service.createGame(GameType.Euchre);
+    const id = service.createGame(GameType.FortyFives);
     await service.joinGame(id, "human", "Alex", "user-1");
     await service.fillWithAI(id, AIDifficulty.Beginner);
     await service.startGame(id);
@@ -74,7 +74,7 @@ describe("GameService bot scheduler", () => {
         release = resolve;
       });
     });
-    const id = service.createGame(GameType.Euchre);
+    const id = service.createGame(GameType.FortyFives);
     await service.fillWithAI(id, AIDifficulty.Beginner);
     await service.startGame(id);
     const room = (await service.getRoom(id))!;
@@ -90,7 +90,7 @@ describe("GameService bot scheduler", () => {
   it("restores one shared engine for simultaneous requests", async () => {
     const store = memoryStore();
     const first = new GameService(store);
-    const id = first.createGame(GameType.Euchre);
+    const id = first.createGame(GameType.FortyFives);
     await first.joinGame(id, "before", "Alex", "user-1");
     const restored = new GameService(store);
     const [one, two] = await Promise.all([
@@ -121,7 +121,7 @@ describe("GameService bot scheduler", () => {
 
   it("only replaces a valid disconnected player and counts connected humans", async () => {
     const service = new GameService(memoryStore());
-    const id = service.createGame(GameType.Euchre);
+    const id = service.createGame(GameType.FortyFives);
     await service.joinGame(id, "human", "Alex");
     await expect(service.replaceWithAI(id, 9)).rejects.toThrow("Invalid seat");
     await expect(service.replaceWithAI(id, 0)).rejects.toThrow(

@@ -60,8 +60,8 @@ export default function WaitingRoom() {
   const gameName =
     room?.gameType === "seven-six"
       ? "Seven-Six"
-      : room?.gameType === "euchre"
-        ? "45s / Euchre"
+      : room?.gameType === "forty-fives"
+        ? "45s"
         : "cards";
   return (
     <div className="waiting-page">
@@ -73,8 +73,8 @@ export default function WaitingRoom() {
         <h1>
           {room?.gameType === "seven-six"
             ? "Seven-Six"
-            : room?.gameType === "euchre"
-              ? "45s / Euchre"
+            : room?.gameType === "forty-fives"
+              ? "45s"
               : "Your private table"}
         </h1>
         <p>Share the room code below. Seats are held for people who join.</p>
@@ -177,7 +177,7 @@ export default function WaitingRoom() {
                     </button>
                   )}
                   <span className="seat-number">
-                    {room.gameType === "euchre"
+                    {room.gameType === "forty-fives"
                       ? `Team ${(i % 2) + 1}`
                       : `Seat ${i + 1}`}
                   </span>

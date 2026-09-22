@@ -13,15 +13,15 @@ import {
 import {
   HeartsEngine,
   SpadesEngine,
-  EuchreEngine,
+  FortyFivesEngine,
   RummyEngine,
   SevenSixEngine,
 } from "@card-game/game-engine";
 import {
   createAIPlayer,
   type AIPlayer,
-  shouldCallTrump,
-  chooseTrumpSuit,
+  fortyFivesBid,
+  fortyFivesTrump,
   findMelds,
   chooseDrawSource,
   sevenSixBid,
@@ -33,7 +33,7 @@ import {
 } from "./GameStateStore.js";
 
 type AnyEngine =
-  HeartsEngine | SpadesEngine | EuchreEngine | RummyEngine | SevenSixEngine;
+  HeartsEngine | SpadesEngine | FortyFivesEngine | RummyEngine | SevenSixEngine;
 
 export const TRICK_REVIEW_MS = 3500;
 export const ROUND_REVIEW_MS = 5000;
@@ -130,9 +130,14 @@ export class GameService {
       case GameType.Spades:
         engine = new SpadesEngine(data.gameId);
         break;
-      case GameType.Euchre:
-        engine = new EuchreEngine(data.gameId);
+      case GameType.FortyFives: {
+        // The table size is part of the saved state, and the constructor
+        // validates it, so it has to be read back before restoring.
+        const saved = (data.engineData as { state?: { config?: GameConfig } })
+          .state?.config;
+        engine = new FortyFivesEngine(data.gameId, saved);
         break;
+      }
       case GameType.Rummy:
         engine = new RummyEngine(data.gameId);
         break;
@@ -144,7 +149,7 @@ export class GameService {
     }
     engine.restore(data.engineData);
     engine.setRoundPause(
-      engine instanceof SevenSixEngine || engine instanceof EuchreEngine,
+      engine instanceof SevenSixEngine || engine instanceof FortyFivesEngine,
     );
 
     const aiPlayers = new Map<number, AIPlayer>();
@@ -198,8 +203,8 @@ export class GameService {
       case GameType.Spades:
         engine = new SpadesEngine(gameId, config);
         break;
-      case GameType.Euchre:
-        engine = new EuchreEngine(gameId, config);
+      case GameType.FortyFives:
+        engine = new FortyFivesEngine(gameId, config);
         break;
       case GameType.Rummy:
         engine = new RummyEngine(gameId, config);
@@ -212,7 +217,7 @@ export class GameService {
     }
 
     engine.setRoundPause(
-      engine instanceof SevenSixEngine || engine instanceof EuchreEngine,
+      engine instanceof SevenSixEngine || engine instanceof FortyFivesEngine,
     );
     const room: GameRoom = {
       engine,
@@ -341,7 +346,7 @@ export class GameService {
     const room = await this.ensureLoaded(gameId);
     if (!room) throw new Error("Game not found");
     this.assertNotReviewing(room);
-    if (!(room.engine instanceof SevenSixEngine || room.engine instanceof EuchreEngine))
+    if (!(room.engine instanceof SevenSixEngine || room.engine instanceof FortyFivesEngine))
       throw new Error("This game does not support manual dealing");
     if (!Number.isInteger(roundNumber) || room.engine.getState().roundNumber !== roundNumber)
       throw new Error("This hand has already advanced. Wait for the table to update.");
@@ -353,7 +358,7 @@ export class GameService {
     const room = await this.ensureLoaded(gameId);
     if (!room) throw new Error("Game not found");
     if (typeof enabled !== "boolean") throw new Error("Choose on or off for automatic dealing");
-    if (!(room.engine instanceof SevenSixEngine || room.engine instanceof EuchreEngine))
+    if (!(room.engine instanceof SevenSixEngine || room.engine instanceof FortyFivesEngine))
       throw new Error("This game does not support automatic dealing");
     room.autoDeal = enabled;
     await this.persist(gameId);
@@ -488,15 +493,21 @@ export class GameService {
     await this.persist(gameId);
   }
 
-  async sevenSixPlaceBid(
+  /** A numeric bid in either family game: tricks in Seven-Six, points in 45s. */
+  async placeFamilyBid(
     gameId: string,
     seatIndex: number,
     bid: number,
   ): Promise<void> {
     const room = await this.ensureLoaded(gameId);
     if (!room) throw new Error("Game not found");
-    if (!(room.engine instanceof SevenSixEngine))
-      throw new Error("Not a Seven-Six game");
+    if (
+      !(
+        room.engine instanceof SevenSixEngine ||
+        room.engine instanceof FortyFivesEngine
+      )
+    )
+      throw new Error("This game does not take a numeric bid");
     this.assertNotReviewing(room);
     room.engine.placeBid(seatIndex, bid);
     await this.persist(gameId);
@@ -509,8 +520,8 @@ export class GameService {
   ): Promise<void> {
     const room = await this.ensureLoaded(gameId);
     if (!room) throw new Error("Game not found");
-    if (!(room.engine instanceof EuchreEngine))
-      throw new Error("Not a Euchre game");
+    if (!(room.engine instanceof FortyFivesEngine))
+      throw new Error("This game does not name a trump suit");
     this.assertNotReviewing(room);
     room.engine.callTrump(seatIndex, suit);
     await this.persist(gameId);
@@ -757,33 +768,29 @@ export class GameService {
       return;
     }
 
-    // ── Euchre: AI trump calling ──
+    // ── Forty-Fives: AI bidding, then naming trump ──
     if (
       state.phase === GamePhase.Bidding &&
-      room.engine instanceof EuchreEngine
+      room.engine instanceof FortyFivesEngine
     ) {
+      const engine = room.engine;
       let currentSeat = state.currentPlayerSeat;
       let ai = room.aiPlayers.get(currentSeat);
 
-      while (ai && room.engine.getState().phase === GamePhase.Bidding) {
-        const hand = room.engine.getState().players[currentSeat].hand;
-        const turnedUp = room.engine.getTurnedUpCard();
-        const legalCalls = room.engine.getLegalTrumpCalls(currentSeat);
-        if (!turnedUp || legalCalls.length === 0) return;
-        let call: Suit | "pass" = "pass";
-        if (legalCalls.includes(turnedUp.suit)) {
-          if (shouldCallTrump(hand, turnedUp.suit)) call = turnedUp.suit;
-        } else {
-          call = chooseTrumpSuit(hand, turnedUp.suit) ?? "pass";
-        }
-        // A stuck dealer must choose one of the three remaining suits.
-        if (!legalCalls.includes(call)) call = legalCalls[0];
+      while (ai && engine.getState().phase === GamePhase.Bidding) {
+        const visible = engine.getVisibleState(currentSeat);
         if (!(await this.pauseForAI(gameId, room, currentSeat, 500))) return;
-        room.engine.callTrump(currentSeat, call);
+        if (engine.getLegalTrumpCalls(currentSeat).length) {
+          // This seat won the auction and now names trump.
+          engine.callTrump(currentSeat, fortyFivesTrump(visible));
+        } else {
+          const bid = fortyFivesBid(visible);
+          engine.placeBid(currentSeat, typeof bid === "number" ? bid : -1);
+        }
         await this.persist(gameId);
         await onStateChanged?.();
 
-        const newState = room.engine.getState();
+        const newState = engine.getState();
         if (newState.phase !== GamePhase.Bidding) break;
         currentSeat = newState.currentPlayerSeat;
         ai = room.aiPlayers.get(currentSeat);

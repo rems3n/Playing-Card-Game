@@ -205,8 +205,8 @@ async function startPractice(page) {
   );
   await page.getByRole("button", { name: new RegExp(GAME.replace("/", "\\/"), "i") }).first().click();
   await page.getByLabel("Your name").fill("Layout check");
-  if (GAME === "Seven-Six")
-    await page.getByLabel("Seats at the table").selectOption(String(SEATS));
+  // Both games offer a seat count; 45s only allows 2, 4 and 6.
+  await page.getByLabel("Seats at the table").selectOption(String(SEATS));
   await page.getByRole("button", { name: /Start practice/i }).click();
   await page.waitForURL(/\/game\/[\w-]+/, { timeout: 30000 });
   await page.locator(".game-page").waitFor({ timeout: 30000 });
@@ -251,9 +251,32 @@ for (const size of sizes) {
     const submit = page.locator(".bidding-panel button[type=submit]");
     if (!(await submit.isDisabled()))
       failures.push(`${size.name} | bidding | submit is enabled before a bid is chosen`);
-    await page.locator(".bid-options button:not([disabled])").first().click();
-    await step("bid selected");
-    await submit.click();
+    const tiles = page.locator(".bid-options button:not([disabled])");
+    if (await tiles.count()) {
+      await tiles.first().click();
+      await step("bid selected");
+      await submit.click();
+    } else {
+      // 45s: a seat with nothing left to outbid can only pass.
+      await page.locator(".bidding-panel .button.secondary").click();
+    }
+
+    // 45s runs an auction; whoever wins it then names trump on the same panel.
+    // Seven-Six has no such step, so this is skipped where it does not appear.
+    const trump = page.locator(".trump-options button:not([disabled])");
+    await page
+      .waitForFunction(
+        () =>
+          !!document.querySelector(".trump-options") ||
+          document.querySelector(".game-page")?.dataset.phase !== "bidding",
+        null,
+        { timeout: 30000, polling: 250 },
+      )
+      .catch(() => {});
+    if (await trump.count()) {
+      await step("naming trump");
+      await trump.first().click();
+    }
 
     await page.waitForTimeout(800);
     await page.getByRole("button", { name: /Table menu/i }).click();

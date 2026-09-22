@@ -41,7 +41,7 @@ hides the dev indicator, but it cannot hide a reload. Do not edit files while a
 run is in progress.
 
 Environment variables: `BASE_URL` (default `http://localhost:3000`), `SEATS`
-(default 7), `GAME` (`Seven-Six` or `45s / Euchre`), `SIZES` (comma-separated,
+(default 7), `GAME` (`Seven-Six` or `45s`), `SIZES` (comma-separated,
 e.g. `320x568,844x390`), `MIN_TOUCH`, `MIN_HAND_CARD`, `CHROMIUM_PATH`.
 
 It is not a CI gate: it needs a running server, a database and a browser

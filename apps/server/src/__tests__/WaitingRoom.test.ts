@@ -124,7 +124,7 @@ describe("waiting room regressions", () => {
     const { connect, create, allReady } = fixture();
     const host = connect("host");
     const guest = connect("guest");
-    await host.send("room:create", { gameType: GameType.Euchre });
+    await host.send("room:create", { gameType: GameType.FortyFives });
     const { roomId } = host.last("room:created");
     await guest.send("room:join", { roomId });
     await allReady(roomId, host, guest);
@@ -143,7 +143,7 @@ describe("waiting room regressions", () => {
     const { connect, service, allReady } = fixture();
     const host = connect("host");
     const guest = connect("guest");
-    await host.send("room:create", { gameType: GameType.Euchre });
+    await host.send("room:create", { gameType: GameType.FortyFives });
     const { roomId } = host.last("room:created");
     await guest.send("room:join", { roomId });
     await allReady(roomId, host, guest);
@@ -183,7 +183,7 @@ describe("waiting room regressions", () => {
     const { connect, rooms } = fixture();
     const host = connect("host");
     const guest = connect("guest");
-    await host.send("room:create", { gameType: GameType.Euchre });
+    await host.send("room:create", { gameType: GameType.FortyFives });
     const { roomId } = host.last("room:created");
     await guest.send("room:join", { roomId });
     const room = (await rooms.load(roomId))!;
@@ -197,7 +197,7 @@ describe("waiting room regressions", () => {
   it("rejects destructive commands from sockets outside the game", async () => {
     const { connect, service } = fixture();
     const stranger = connect("stranger");
-    const gameId = service.createGame(GameType.Euchre);
+    const gameId = service.createGame(GameType.FortyFives);
     await stranger.send("game:end", { gameId });
     expect(stranger.last("game:error").code).toBe("NOT_IN_GAME");
     expect(await service.getRoom(gameId)).toBeDefined();

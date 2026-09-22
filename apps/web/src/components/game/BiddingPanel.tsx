@@ -172,65 +172,118 @@ export function BiddingPanel({
     );
   }
 
-  if (gameState.gameType === GameType.Euchre) {
-    const legalCalls = gameState.legalTrumpCalls ?? [];
+  if (gameState.gameType === GameType.FortyFives) {
     const suitNames: Record<string, string> = {
-      H: "Hearts",
-      D: "Diamonds",
-      C: "Clubs",
-      S: "Spades",
+      H: "hearts",
+      D: "diamonds",
+      C: "clubs",
+      S: "spades",
     };
     const suits = [
-      { suit: "H", symbol: "\u2665", color: "text-[#c33]" },
-      { suit: "D", symbol: "\u2666", color: "text-[#c33]" },
-      { suit: "C", symbol: "\u2663", color: "text-[var(--text-primary)]" },
-      { suit: "S", symbol: "\u2660", color: "text-[var(--accent-blue)]" },
+      { suit: Suit.Hearts, symbol: "\u2665", red: true },
+      { suit: Suit.Diamonds, symbol: "\u2666", red: true },
+      { suit: Suit.Clubs, symbol: "\u2663", red: false },
+      { suit: Suit.Spades, symbol: "\u2660", red: false },
     ];
+    const legalCalls = gameState.legalTrumpCalls ?? [];
+    const legalBids = gameState.legalBids ?? [];
+    const naming = legalCalls.length > 0;
+    const standing = (gameState.bids ?? []).reduce<number>(
+      (best, bid) => (typeof bid === "number" && bid > best ? bid : best),
+      0,
+    );
 
-    return (
-      <div className="bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-subtle)] p-4 text-center">
-        <div className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3">
-          Call Trump
-        </div>
-        <p className="text-sm text-[var(--text-secondary)] mb-3">
-          {gameState.trumpCallRound === 1
-            ? `Order up ${suitNames[gameState.turnedUpCard?.suit ?? ""] ?? "the turned suit"}, or pass.`
-            : "Choose a different suit. The dealer must call."}
-        </p>
-
-        {isMyTurn ? (
-          <div>
-            <p className="text-[12px] text-[var(--accent-green)] font-semibold mb-3">
-              Choose trump or pass
-            </p>
-            <div className="flex justify-center gap-2 mb-3">
-              {suits.map((s) => (
-                <button
-                  key={s.suit}
-                  onClick={() => onCallTrump(s.suit)}
-                  disabled={pending || !legalCalls.includes(s.suit as Suit)}
-                  aria-label={`Call ${suitNames[s.suit]}`}
-                  className="w-12 h-12 rounded-lg border border-[var(--border-subtle)] enabled:hover:border-[var(--accent-gold)] disabled:opacity-25 disabled:cursor-not-allowed flex items-center justify-center transition-all"
-                >
-                  <span className={`text-2xl ${s.color}`}>{s.symbol}</span>
-                </button>
-              ))}
-            </div>
-            <button
-              onClick={() => onCallTrump("pass")}
-              disabled={pending || !legalCalls.includes("pass")}
-              className="min-h-11 px-5 text-sm border border-[var(--border-subtle)] rounded enabled:hover:bg-white/[0.04] disabled:opacity-25 transition-colors"
-            >
-              Pass
-            </button>
-          </div>
-        ) : (
-          <p className="text-[12px] text-[var(--text-muted)]">
+    if (!isMyTurn)
+      return (
+        <section className="bidding-panel" aria-label="The auction">
+          <h2>{naming ? "Naming trump" : "Bidding"}</h2>
+          <p role="status">
             Waiting for{" "}
             {gameState.players[gameState.currentPlayerSeat]?.displayName}
+            {naming ? " to name trump." : " to bid."}
           </p>
-        )}
-      </div>
+        </section>
+      );
+
+    // The winner of the auction names trump before anyone leads.
+    if (naming)
+      return (
+        <section className="bidding-panel" aria-label="Name trump">
+          <h2>Name trump</h2>
+          <p id="trump-help">
+            You won the auction at {gameState.contract}. Name the suit you want
+            as trump.
+          </p>
+          <div className="trump-options" role="group" aria-label="Trump suits">
+            {suits.map((s) => (
+              <button
+                type="button"
+                key={s.suit}
+                className={s.red ? "red" : ""}
+                aria-label={`Trump is ${suitNames[s.suit]}`}
+                disabled={pending || !legalCalls.includes(s.suit)}
+                onClick={() => onCallTrump(s.suit)}
+              >
+                <span aria-hidden>{s.symbol}</span>
+                <small>{suitNames[s.suit]}</small>
+              </button>
+            ))}
+          </div>
+        </section>
+      );
+
+    return (
+      <section className="bidding-panel" aria-label="Choose your bid">
+        <h2>Bidding</h2>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!pending && selectedBid !== null) onBid(selectedBid);
+          }}
+        >
+          <p id="bid-help">
+            {standing
+              ? `The bid stands at ${standing}. Bid higher or pass.`
+              : "Bid the points you expect to take, or pass. Each trick is worth 5, and the highest trump is worth 5 more."}
+          </p>
+          <div className="bid-options" role="group" aria-label="Bid options">
+            {[15, 20, 25, 30].map((bid) => (
+              <button
+                type="button"
+                key={bid}
+                aria-label={`Bid ${bid}`}
+                aria-pressed={bid === selectedBid}
+                disabled={pending || !legalBids.includes(bid)}
+                onClick={() => setSelectedBid(bid)}
+              >
+                {bid}
+              </button>
+            ))}
+          </div>
+          <button
+            className="button primary full"
+            type="submit"
+            disabled={pending || selectedBid === null || !legalBids.includes(selectedBid)}
+            aria-describedby="bid-help"
+          >
+            {pending
+              ? "Submitting\u2026"
+              : selectedBid === null
+                ? "Submit bid"
+                : `Submit bid: ${selectedBid}`}
+          </button>
+          <button
+            type="button"
+            className="button secondary full"
+            disabled={pending || !legalBids.includes(-1)}
+            onClick={() => !pending && onBid(-1)}
+          >
+            {legalBids.includes(-1)
+              ? "Pass"
+              : "You must bid \u2014 nobody else did"}
+          </button>
+        </form>
+      </section>
     );
   }
 

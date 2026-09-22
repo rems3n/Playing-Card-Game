@@ -3,7 +3,7 @@
 import { Dialog } from "./Dialog";
 
 interface RulesModalProps {
-  gameType: "hearts" | "spades" | "euchre" | "rummy" | "seven-six";
+  gameType: "hearts" | "spades" | "forty-fives" | "rummy" | "seven-six";
   open: boolean;
   onClose: () => void;
 }
@@ -96,61 +96,59 @@ const SPADES_RULES = {
   ],
 };
 
-const EUCHRE_RULES = {
-  title: "45s / Euchre",
+const FORTY_FIVES_RULES = {
+  title: "45s",
   overview:
-    "This table plays Euchre: a partnership trick-taking game with a 24-card deck, where the team that calls trump must win at least 3 of 5 tricks to score. Forty-Fives is a different game and is not implemented yet — see the last section.",
-  players: "4 players (2 teams of 2, partners sit across)",
-  deck: "24 cards: 9, 10, J, Q, K, A in each suit",
-  goal: "First team to reach 10 points wins.",
+    "Bid for the right to name trump, then take tricks. Each trick is worth 5 points and the highest trump played is worth 5 more, so 30 points are on the table every hand. A side that bids and falls short loses its bid instead of scoring.",
+  players: "2, 4 or 6 players. Four and six play in two teams, sitting alternately.",
+  deck: "All 52 cards",
+  goal: "First side to 45 points wins.",
   sections: [
     {
-      heading: "Card Ranking (Trump Suit)",
+      heading: "The auction",
       items: [
-        "Right Bower: Jack of the trump suit (highest card in the game).",
-        "Left Bower: Jack of the same-color suit (second highest).",
-        "Then: A, K, Q, 10, 9 of trump.",
-        "Non-trump suits rank: A, K, Q, J, 10, 9 (the Left Bower leaves its original suit).",
+        "Everyone is dealt 5 cards. Bidding starts to the dealer's left.",
+        "Bid 15, 20, 25 or 30, or pass. Each bid must beat the one before it.",
+        "Only the dealer may take the bid at the standing level, and the dealer speaks last.",
+        "If everyone passes to the dealer, the dealer must bid at least 15.",
+        "The winner names any suit as trump and leads the first trick.",
       ],
     },
     {
-      heading: "Dealing & Trump Selection",
+      heading: "Trump, strongest first",
       items: [
-        "Each player is dealt 5 cards. One card is turned face-up.",
-        'Round 1: Starting left of dealer, each player may tell the dealer to "pick it up" (that suit becomes trump) or pass.',
-        "If the dealer picks it up, they swap the face-up card for a discard.",
-        "Round 2: If all pass, each player (except the turned-up suit) may name a different suit as trump, or pass.",
-        "If all pass again, the dealer is forced to choose (stick the dealer).",
+        "The 5 of trump is the highest card in the game.",
+        "Then the jack of trump.",
+        "Then the ace of hearts — which is trump whatever the trump suit is.",
+        "Then the ace of trump (unless hearts are trump), the king and the queen.",
+        "Then the numbers: highest first in a red trump suit, lowest first in a black one. With clubs as trump the 2 beats the 10.",
       ],
     },
     {
-      heading: "Playing Tricks",
+      heading: "Plain suits",
       items: [
-        "The player left of the dealer leads the first trick.",
-        "Players must follow the lead suit if possible (the Left Bower belongs to the trump suit, not its printed suit).",
-        "Highest trump wins, or highest card of the lead suit if no trump played.",
-        "5 tricks are played per round.",
+        "Red suits run ace, king, queen, jack, then 10 down to 2.",
+        "Black suits run king, queen, jack, ace, then 2 up to 10 — the low cards are the strong ones.",
+        "Hearts has no ace as a plain suit: the ace of hearts is always trump.",
+      ],
+    },
+    {
+      heading: "Playing tricks",
+      items: [
+        "Follow the suit led if you can. Any trump beats any plain card.",
+        "Reneging: if a trump is led, you may hold back the 5 of trump, the jack of trump or the ace of hearts — but only if the card you hold outranks the one led.",
+        "You must play a top trump if a higher trump is led, and ordinary trumps must always follow.",
+        "Five tricks are played each hand.",
       ],
     },
     {
       heading: "Scoring",
       items: [
-        "Calling team wins 3–4 tricks = 1 point.",
-        "Calling team wins all 5 tricks (march) = 2 points.",
-        "Calling team goes alone and wins all 5 = 4 points.",
-        "Defending team wins 3+ tricks (euchre) = 2 points to defenders.",
-        "First team to 10 points wins.",
-      ],
-    },
-    {
-      heading: "How Forty-Fives differs",
-      items: [
-        "45s uses all 52 cards, not 24.",
-        "The 5 of trump is the highest card, then the jack of trump, then the ace of hearts — which is trump whatever the trump suit is.",
-        "Other cards rank highest in red suits and lowest in black, so the 2 of clubs beats the 10 of clubs.",
-        "Each trick is worth 5 points, plus 5 for the highest trump played, and the game is to 45.",
-        "Holding one of the top three trumps lets you decline to follow a lower trump.",
-        "This table does none of that: it plays Euchre as described above.",
+        "5 points for each trick you take.",
+        "5 points to whoever played the highest trump in the hand.",
+        "The side that won the auction must reach its bid. If it falls short it loses the bid instead of scoring.",
+        "The other side always scores what it takes.",
+        "First side to 45 wins.",
       ],
     },
   ],
@@ -256,7 +254,7 @@ const SEVEN_SIX_RULES = {
 const RULES: Record<string, typeof HEARTS_RULES> = {
   hearts: HEARTS_RULES,
   spades: SPADES_RULES,
-  euchre: EUCHRE_RULES,
+  "forty-fives": FORTY_FIVES_RULES,
   rummy: RUMMY_RULES,
   "seven-six": SEVEN_SIX_RULES,
 };

@@ -40,7 +40,7 @@ const defaultInviteService = new InviteService(
 const PLAYERS_PER_GAME: Record<string, number> = {
   hearts: 4,
   spades: 4,
-  euchre: 4,
+  "forty-fives": 4, // default; overridden by config.maxPlayers
   rummy: 4, // default; overridden by config.maxPlayers
   "seven-six": 4, // default; overridden by config.maxPlayers
 };
@@ -123,7 +123,7 @@ export function setupGameHandlers(
         const state = await gameService.getVisibleState(gameId, seat);
         socket.emit("game:state", state);
 
-        // Handle AI turns (passing in Hearts, bidding in Spades/Euchre)
+        // Handle AI turns (passing in Hearts, bidding in Spades/Seven-Six/45s)
         await handleAITurns(io, gameService, gameId);
         await broadcastStates(io, gameService, gameId);
 
@@ -852,8 +852,11 @@ export function setupGameHandlers(
         }
 
         const room = await gameService.getRoom(gameId);
-        if (room?.gameType === GameType.SevenSix) {
-          await gameService.sevenSixPlaceBid(gameId, seat, bid);
+        if (
+          room?.gameType === GameType.SevenSix ||
+          room?.gameType === GameType.FortyFives
+        ) {
+          await gameService.placeFamilyBid(gameId, seat, bid);
         } else {
           await gameService.placeBid(gameId, seat, bid);
         }
@@ -873,7 +876,7 @@ export function setupGameHandlers(
       }
     });
 
-    // ── Call trump (Euchre) ──
+    // ── Name trump (45s: the winner of the auction) ──
     socket.on("game:call_trump", async (data) => {
       try {
         const { gameId, suit } = data;

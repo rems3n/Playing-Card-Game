@@ -194,8 +194,13 @@ function FamilyTable() {
     );
   const reviewing = state.phase === GamePhase.TrickResolution;
   const roundOver = state.phase === GamePhase.RoundScoring;
-  const familyGame = [GameType.SevenSix, GameType.Euchre].includes(state.gameType);
-  const trumpCard = state.gameType === GameType.SevenSix ? state.trumpCard : state.turnedUpCard;
+  const familyGame = [GameType.SevenSix, GameType.FortyFives].includes(state.gameType);
+  // 45s only: who won the auction, once it has closed.
+  const declarer =
+    (state.declarerSeat ?? -1) >= 0
+      ? state.players[state.declarerSeat!]
+      : undefined;
+  const trumpCard = state.gameType === GameType.SevenSix ? state.trumpCard : undefined;
   const completed = reviewing ? state.lastTrick : undefined;
   const winnerName =
     completed?.winningSeat === state.mySeat
@@ -216,8 +221,8 @@ function FamilyTable() {
   const name =
     state.gameType === GameType.SevenSix
       ? "Seven-Six"
-      : state.gameType === GameType.Euchre
-        ? "45s / Euchre"
+      : state.gameType === GameType.FortyFives
+        ? "45s"
         : state.gameType;
   const legal = (c: Card) => state.legalMoves.some((m) => key(m) === key(c));
   const scores = gameOver?.finalScores ?? state.scores;
@@ -233,8 +238,8 @@ function FamilyTable() {
             <div className="score-heading">
               <h2>Scoreboard</h2>
               <span>
-                {state.gameType === GameType.Euchre
-                  ? `First to ${state.config.targetScore}`
+                {state.gameType === GameType.FortyFives
+                  ? `Five a trick · first to ${state.config.targetScore}`
                   : "Exact bid: 10 + tricks"}
               </span>
             </div>
@@ -256,9 +261,10 @@ function FamilyTable() {
                     <th>
                       {p.displayName}
                       {p.seatIndex === state.mySeat && <small> You</small>}
-                      {state.gameType === GameType.Euchre && (
-                        <small> · Team {(p.seatIndex % 2) + 1}</small>
-                      )}
+                      {state.gameType === GameType.FortyFives &&
+                        state.players.length > 2 && (
+                          <small> · Team {(p.seatIndex % 2) + 1}</small>
+                        )}
                     </th>
                     <td>
                       {state.bids?.[p.seatIndex] === -1
@@ -407,14 +413,17 @@ familyGame && !done && (
               &nbsp;{" "}
               {state.trumpSuit
                 ? `Trump ${symbols[state.trumpSuit]}`
-                : "Choosing trump"}
+                : state.gameType === GameType.FortyFives &&
+                    (state.declarerSeat ?? -1) < 0
+                  ? "Bidding"
+                  : "Choosing trump"}
             </span>
           </div>
           {roundOver && (
             <section className="panel round-result" aria-label="Hand results">
               <p className="eyebrow">HAND {state.roundNumber + 1} COMPLETE</p>
-              <h2>{handBest === 0 ? "No player made their bid" : state.gameType === GameType.Euchre
-                ? `Team ${(handWinners[0].seatIndex % 2) + 1} wins the hand`
+              <h2>{!handWinners.length || handBest <= 0 ? "Nobody scored this hand" : state.gameType === GameType.FortyFives && state.players.length > 2
+                ? `Team ${(handWinners[0].seatIndex % 2) + 1} takes the hand`
                 : `${handWinners.map(p => p.seatIndex === state.mySeat ? "You" : p.displayName).join(" & ")} ${handWinners.length > 1 || handWinners[0]?.seatIndex === state.mySeat ? "earn" : "earns"} the most points`}</h2>
               <ul className="round-points">
                 {state.players.map(p => <li key={p.seatIndex}><span>{p.seatIndex === state.mySeat ? "You" : p.displayName}</span><strong>+{state.roundScores[p.seatIndex]} points</strong></li>)}
@@ -467,7 +476,7 @@ familyGame && !done && (
               {state.phase === GamePhase.Bidding && !done ? (
                 <div className="bid-surface">
                   <BiddingPanel
-                    key={`${state.roundNumber}:${state.currentPlayerSeat}:${state.trumpCallRound}`}
+                    key={`${state.roundNumber}:${state.currentPlayerSeat}:${state.declarerSeat}`}
                     gameState={state}
                     pending={pending || !connection.connected}
                     onBid={(bid) => {
@@ -577,20 +586,18 @@ familyGame && !done && (
             <section className="trump-panel" aria-label="Trump for this hand">
               {trumpCard && (
                 <div className={`face-card ${["H", "D"].includes(trumpCard.suit) ? "red" : ""}`}
-                  role="img" aria-label={`${state.gameType === GameType.SevenSix ? "Trump card" : "Turned-up card"}: ${label(trumpCard)}`}>
+                  role="img" aria-label={`Trump card: ${label(trumpCard)}`}>
                   <Face card={trumpCard} />
                 </div>
               )}
               <div>
-                <p className="eyebrow">{state.trumpSuit ? "TRUMP" : "TURNED-UP CARD"}</p>
+                <p className="eyebrow">TRUMP</p>
                 <h2>{state.trumpSuit ? `${symbols[state.trumpSuit]} ${suits[state.trumpSuit]}` : trumpCard ? label(trumpCard) : "Choosing trump"}</h2>
                 <p>{state.gameType === GameType.SevenSix
                   ? `${trumpCard ? label(trumpCard) + " · " : ""}Set aside for this hand. No player can hold it.`
-                  : state.phase === GamePhase.Bidding
-                    ? "The turned-up card is picked up by the dealer if its suit is ordered."
-                    : state.trumpCallRound === 1
-                      ? "The dealer picked up the turned-up card and discarded one card."
-                      : "The turned-up card was passed. Trump was chosen in the second bidding round."}</p>
+                  : declarer
+                    ? `${declarer.seatIndex === state.mySeat ? "You" : declarer.displayName} won the auction at ${state.contract} and named it. The 5, the jack and the ace of hearts are the top three trumps.`
+                    : "The 5, the jack and the ace of hearts are the top three trumps."}</p>
               </div>
             </section>
           )}
@@ -610,7 +617,7 @@ familyGame && !done && (
           <p className="table-tip">
             {state.gameType === GameType.SevenSix
               ? "Make your bid exactly to earn a bonus. The dealer cannot make the total bids equal the number of tricks."
-              : "Partners sit opposite each other. Remember: the jack of the same color as trump is also a trump."}
+              : "The five of trump is the highest card, then the jack of trump, then the ace of hearts — which is trump in every suit."}
           </p>
         </aside>
       </div>
@@ -662,7 +669,7 @@ familyGame && !done && (
         </section>
       </Dialog>
       <RulesModal
-        gameType={state.gameType as "seven-six" | "euchre"}
+        gameType={state.gameType as "seven-six" | "forty-fives"}
         open={rules}
         onClose={() => setRules(false)}
       />

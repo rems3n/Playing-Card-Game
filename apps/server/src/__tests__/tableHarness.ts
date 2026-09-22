@@ -257,7 +257,7 @@ export class Driver {
       state.trickNumber,
       state.currentTrick.length,
       state.bids,
-      state.trumpCallRound,
+      state.declarerSeat,
     ]);
     if (this.acted.has(key)) return;
     this.acted.add(key);

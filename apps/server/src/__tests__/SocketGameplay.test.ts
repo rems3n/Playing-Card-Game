@@ -39,7 +39,7 @@ function event(socket: Socket, name: string) {
   });
 }
 describe("real authenticated Socket.IO gameplay", () => {
-  it.each([GameType.SevenSix, GameType.Euchre])(
+  it.each([GameType.SevenSix, GameType.FortyFives])(
     "plays a full mixed human/bot %s game through the real socket handlers",
     async (type) => {
       const http = createServer();
@@ -109,7 +109,7 @@ describe("real authenticated Socket.IO gameplay", () => {
           gameType: type,
           config: {
             maxPlayers: 4,
-            targetScore: type === GameType.Euchre ? 2 : 0,
+            targetScore: type === GameType.FortyFives ? 2 : 0,
           },
         });
         const { roomId } = await next;
@@ -173,17 +173,22 @@ describe("real authenticated Socket.IO gameplay", () => {
               state.currentTrick,
               state.bids,
               state.myHand,
-              state.trumpCallRound,
+              state.declarerSeat,
             ]);
             if (actions.has(fingerprint)) return;
             actions.add(fingerprint);
             if (state.phase === GamePhase.Bidding) {
-              if (type === GameType.Euchre)
-                socket.emit("game:call_trump", {
-                  gameId,
-                  suit: state.legalTrumpCalls![0],
-                });
-              else {
+              if (type === GameType.FortyFives) {
+                // 45s runs an auction first, and only its winner names trump.
+                const calls = state.legalTrumpCalls ?? [];
+                if (calls.length)
+                  socket.emit("game:call_trump", { gameId, suit: calls[0] });
+                else
+                  socket.emit("game:bid", {
+                    gameId,
+                    bid: state.legalBids![0],
+                  });
+              } else {
                 const forbidden =
                   state.dealerSeat === state.mySeat
                     ? state.handSize! -

@@ -15,6 +15,15 @@ export default function Home() {
   const [game, setGame] = useState(GameType.SevenSix);
   const [name, setName] = useState("");
   const [count, setCount] = useState(4);
+  // 45s seats two, four or six; the nearest allowed size is used when the
+  // player switches from a Seven-Six table of three, five or seven.
+  const fortyFivesSeats = [2, 4, 6].includes(count)
+    ? count
+    : count < 3
+      ? 2
+      : count < 6
+        ? 4
+        : 6;
   const [difficulty, setDifficulty] = useState(AIDifficulty.Beginner);
   const [mode, setMode] = useState<"friends" | "practice">("friends");
   const [code, setCode] = useState("");
@@ -69,8 +78,8 @@ export default function Home() {
         return;
       }
       const config = {
-        maxPlayers: game === GameType.Euchre ? 4 : count,
-        targetScore: game === GameType.Euchre ? 10 : 0,
+        maxPlayers: game === GameType.FortyFives ? fortyFivesSeats : count,
+        targetScore: game === GameType.FortyFives ? 45 : 0,
       };
       if (mode === "friends")
         socket.emit("room:create", { gameType: game, config });
@@ -140,11 +149,11 @@ export default function Home() {
                 copy: "Bid the tricks you expect to win. Make it exactly for a bonus.",
               },
               {
-                type: GameType.Euchre,
-                name: "45s / Euchre",
-                symbol: "♠",
-                meta: "4 players · Teams",
-                copy: "Partners sit opposite each other. First team to 10 points wins.",
+                type: GameType.FortyFives,
+                name: "45s",
+                symbol: "45",
+                meta: "2, 4 or 6 players",
+                copy: "Bid for the right to name trump. Five a trick, first to 45.",
               },
             ].map((g) => (
               <button
@@ -194,11 +203,13 @@ export default function Home() {
             <label>
               Seats at the table
               <select
-                value={game === GameType.Euchre ? 4 : count}
-                disabled={game === GameType.Euchre}
+                value={game === GameType.FortyFives ? fortyFivesSeats : count}
                 onChange={(e) => setCount(Number(e.target.value))}
               >
-                {[2, 3, 4, 5, 6, 7].map((n) => (
+                {(game === GameType.FortyFives
+                  ? [2, 4, 6]
+                  : [2, 3, 4, 5, 6, 7]
+                ).map((n) => (
                   <option key={n} value={n}>
                     {n} players
                   </option>
@@ -226,8 +237,8 @@ export default function Home() {
             {mode === "friends"
               ? "Create a private table and share the invite. Bots can fill empty seats."
               : "Play at your own pace with computer opponents."}{" "}
-            {game === GameType.Euchre &&
-              "Uses the existing Euchre rules; first team to 10."}
+            {game === GameType.FortyFives &&
+              "Four and six play in two teams, sitting alternately."}
           </p>
           {error && (
             <p role="alert" className="notice error">
@@ -304,7 +315,7 @@ export default function Home() {
       )}
       <footer className="home-footer">
         <span>♣ &nbsp; Made for the games you grew up with.</span>
-        <Link href="/rules">Seven-Six &amp; 45s / Euchre</Link>
+        <Link href="/rules">Seven-Six &amp; 45s</Link>
       </footer>
     </div>
   );

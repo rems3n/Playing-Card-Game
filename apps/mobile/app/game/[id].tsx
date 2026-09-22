@@ -143,7 +143,7 @@ export default function GameScreen() {
           </View>
         </View>
       )}
-      {[GameType.SevenSix, GameType.Euchre].includes(gameState.gameType) && (
+      {[GameType.SevenSix, GameType.FortyFives].includes(gameState.gameType) && (
         <View style={styles.header}>
           <Text style={styles.headerText}>Automatically deal next hand</Text>
           <Switch accessibilityLabel="Automatically deal next hand" value={gameState.autoDeal ?? false}
