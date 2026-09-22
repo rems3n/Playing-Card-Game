@@ -18,7 +18,11 @@ export async function createLiveKitSession(): Promise<MediaSession> {
   );
 
   let room: InstanceType<typeof Room> | null = null;
+  // `error` means the call is over. `notice` means one control failed and the
+  // call is still running. Conflating them once told a player their call had
+  // ended while their camera was still publishing to everyone else.
   let error: string | null = null;
+  let notice: string | null = null;
   const listeners = new Set<(snapshot: MediaSnapshot) => void>();
   const speaking = new Set<string>();
   const mutedForMe = new Set<string>();
@@ -59,18 +63,23 @@ export async function createLiveKitSession(): Promise<MediaSession> {
     return {
       participants: people,
       error,
+      notice,
       connected: state === ConnectionState.Connected,
       reconnecting: state === ConnectionState.Reconnecting,
     };
   }
   const publish = () => {
     const next = snapshot();
+    // A notice is an event, not a state: delivered once, so dismissing it does
+    // not bring it back on the next participant change.
+    notice = null;
     for (const listener of listeners) listener(next);
   };
 
   return {
     async connect(credentials: MediaCredentials) {
       error = null;
+      notice = null;
       // Adaptive streaming and simulcast let the SFU drop video first when a
       // phone's connection degrades, so audio survives a weak network.
       room = new Room({ adaptiveStream: true, dynacast: true });
@@ -110,6 +119,7 @@ export async function createLiveKitSession(): Promise<MediaSession> {
       const leaving = room;
       room = null;
       error = null;
+      notice = null;
       speaking.clear();
       mutedForMe.clear();
       publish();
@@ -119,7 +129,7 @@ export async function createLiveKitSession(): Promise<MediaSession> {
       try {
         await room?.localParticipant.setMicrophoneEnabled(on);
       } catch (cause) {
-        error =
+        notice =
           cause instanceof Error
             ? `Microphone unavailable: ${cause.message}`
             : "Microphone unavailable.";
@@ -130,7 +140,7 @@ export async function createLiveKitSession(): Promise<MediaSession> {
       try {
         await room?.localParticipant.setCameraEnabled(on);
       } catch (cause) {
-        error =
+        notice =
           cause instanceof Error
             ? `Camera unavailable: ${cause.message}`
             : "Camera unavailable.";
@@ -138,6 +148,14 @@ export async function createLiveKitSession(): Promise<MediaSession> {
       publish();
     },
     async listAudioOutputs(): Promise<MediaDevice[]> {
+      // Choosing an output needs setSinkId. iOS enumerates outputs it will not
+      // switch to, so without this check the table offers a control that can
+      // only fail, which is how a harmless tap came to look like a dropped call.
+      if (
+        typeof HTMLMediaElement === "undefined" ||
+        !("setSinkId" in HTMLMediaElement.prototype)
+      )
+        return [];
       try {
         const devices = await Room.getLocalDevices("audiooutput");
         return devices
@@ -155,10 +173,10 @@ export async function createLiveKitSession(): Promise<MediaSession> {
       try {
         await room?.switchActiveDevice("audiooutput", deviceId);
       } catch (cause) {
-        error =
+        notice =
           cause instanceof Error
-            ? `Could not switch output: ${cause.message}`
-            : "Could not switch output.";
+            ? `Could not switch the speaker: ${cause.message}`
+            : "Could not switch the speaker.";
       }
       publish();
     },

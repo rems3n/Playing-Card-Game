@@ -80,11 +80,16 @@ function fakeSession() {
   let snapshot: MediaSnapshot = {
     participants: [],
     error: null,
+    notice: null,
     connected: false,
     reconnecting: false,
   };
+  // The real session refuses to switch the speaker on browsers without
+  // setSinkId, which is what a phone does.
+  let outputFails = false;
   const publish = (next: Partial<MediaSnapshot>) => {
-    snapshot = { ...snapshot, ...next };
+    // A notice is delivered once, exactly as the LiveKit session does it.
+    snapshot = { ...snapshot, notice: null, ...next };
     for (const listener of listeners) listener(snapshot);
   };
   const session: MediaSession = {
@@ -117,6 +122,8 @@ function fakeSession() {
     },
     async setAudioOutput(deviceId) {
       calls.outputs.push(deviceId);
+      if (outputFails)
+        publish({ notice: "Could not switch the speaker: not supported." });
     },
     async setMutedForMe(identity, muted) {
       calls.mutedForMe.push([identity, muted]);
@@ -142,6 +149,13 @@ function fakeSession() {
     withoutOutputs() {
       outputs = [];
       return this;
+    },
+    withFailingOutput() {
+      outputFails = true;
+      return this;
+    },
+    get connected() {
+      return snapshot.connected;
     },
   };
 }
@@ -182,6 +196,62 @@ async function joinCall(fake: ReturnType<typeof fakeSession>) {
 
 describe("the table call", () => {
   beforeEach(() => transport.reset());
+
+  it("keeps the call running when the browser refuses to switch the speaker", async () => {
+    const fake = fakeSession().withFailingOutput();
+    const user = await joinCall(fake);
+    await user.click(screen.getByRole("button", { name: "Camera on" }));
+    await waitFor(() => expect(fake.calls.camera).toEqual([true]));
+
+    await user.selectOptions(screen.getByLabelText("Sound out"), "bt");
+
+    // The message is said out loud...
+    await waitFor(() =>
+      expect(screen.getByRole("alert").textContent).toContain(
+        "Could not switch the speaker",
+      ),
+    );
+    // ...and nothing else changes: the call is still up, the camera is still
+    // publishing, and the player is not told they have left.
+    expect(screen.getByRole("status").textContent).toContain("in the call");
+    expect(screen.queryByText(/not connected/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Join the call" })).toBeNull();
+    expect(fake.calls.disconnect).toBe(0);
+    expect(fake.connected).toBe(true);
+    expect(fake.calls.camera).toEqual([true]);
+  });
+
+  it("really leaves the room whenever it says the call is not connected", async () => {
+    const fake = fakeSession();
+    const user = await joinCall(fake);
+    await user.click(screen.getByRole("button", { name: "Camera on" }));
+    await waitFor(() => expect(fake.calls.camera).toEqual([true]));
+
+    await act(async () => {
+      fake.publish({ error: "The call ended. The game is unaffected." });
+    });
+
+    await waitFor(() =>
+      expect(screen.getByRole("status").textContent).toContain(
+        "The call is not connected",
+      ),
+    );
+    // The screen said the call is over, so the room must be gone with it.
+    await waitFor(() => expect(fake.calls.disconnect).toBe(1));
+    expect(fake.connected).toBe(false);
+
+    // And rejoining has to work, rather than silently doing nothing.
+    transport.emit.mockClear();
+    await user.click(screen.getByRole("button", { name: "Join the call" }));
+    expect(transport.emit).toHaveBeenCalledWith("media:token", {
+      gameId: "game-1",
+    });
+    await act(async () => {
+      transport.deliver("media:credentials", credentials);
+    });
+    await waitFor(() => expect(fake.calls.connect).toBe(2));
+    expect(screen.getByRole("status").textContent).toContain("in the call");
+  });
 
   it("asks the server for credentials and starts with the microphone and camera off", async () => {
     const fake = fakeSession();

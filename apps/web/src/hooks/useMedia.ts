@@ -65,6 +65,7 @@ export function useMedia({
   const [snapshot, setSnapshot] = useState<MediaSnapshot>({
     participants: [],
     error: null,
+    notice: null,
     connected: false,
     reconnecting: false,
   });
@@ -89,6 +90,7 @@ export function useMedia({
     setSnapshot({
       participants: [],
       error: null,
+      notice: null,
       connected: false,
       reconnecting: false,
     });
@@ -103,11 +105,21 @@ export function useMedia({
     };
   }, [gameId, teardown]);
 
+  // If the server withdraws calls the controls disappear, so the room has to
+  // go with them rather than publishing on behind a hidden panel.
+  useEffect(() => {
+    if (enabled) return;
+    wanted.current = false;
+    void teardown();
+  }, [enabled, teardown]);
+
   useEffect(() => {
     if (!enabled) return;
     const onCredentials = async (credentials: MediaCredentials) => {
       if (!wanted.current) return;
       try {
+        // Never stack two rooms: an earlier one would keep publishing unseen.
+        if (session.current) await teardown();
         const next = await createSession();
         if (!wanted.current) {
           await next.disconnect().catch(() => {});
@@ -150,19 +162,30 @@ export function useMedia({
     if (snapshot.error) {
       setError(snapshot.error);
       setStatus("failed");
+      // Telling someone the call is over while their camera still publishes is
+      // worse than any call failure, so the room really is left here.
+      wanted.current = false;
+      void teardown();
       return;
     }
+    // A control that failed is said out loud and changes nothing else: the
+    // call keeps running, and the player is still on air.
+    if (snapshot.notice) setError(snapshot.notice);
     if (snapshot.reconnecting) setStatus("reconnecting");
     else if (snapshot.connected) setStatus("connected");
-  }, [snapshot]);
+  }, [snapshot, teardown]);
 
   const join = useCallback(() => {
-    if (!enabled || !gameId || wanted.current) return;
+    if (!enabled || !gameId) return;
+    // Rejoining after a failure has to work, so the guard is the live call
+    // rather than a flag that a failure could leave stuck set.
+    if (status === "connecting" || status === "connected" || status === "reconnecting")
+      return;
     wanted.current = true;
     setError(null);
     setStatus("connecting");
     socket.emit("media:token", { gameId });
-  }, [enabled, gameId, socket]);
+  }, [enabled, gameId, socket, status]);
 
   const leave = useCallback(() => {
     wanted.current = false;

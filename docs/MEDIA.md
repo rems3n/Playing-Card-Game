@@ -93,6 +93,27 @@ Layout, which the phone-viewport suite checks at 320x568 through 844x390:
 - `adaptiveStream` and `dynacast` are on, so the SFU drops video layers before
   audio when a phone's connection degrades.
 
+### Failures never lie about what is being published
+
+The snapshot a session hands the table separates two things that used to share
+one field:
+
+- **`error`** means the call is over — it dropped, or it could not be joined.
+  Whenever the table shows this, the room has already been left, so nothing is
+  still publishing. This invariant matters more than any call feature: saying
+  "the call is not connected" while a camera is still on air is worse than any
+  failure it could be reporting.
+- **`notice`** means one control failed and the call carried on — a speaker the
+  browser will not switch, a camera it will not open. It is said out loud,
+  delivered once so dismissing it sticks, and changes nothing else.
+
+Rejoining after any failure re-asks the server: the guard on joining is whether
+a call is actually live, not a flag a failure could leave set.
+
+Choosing an audio output needs `setSinkId`, which iOS does not have. The output
+list is empty where it is missing, so the table never offers a control that can
+only fail.
+
 ## Variables
 
 | Service | Variable                  | Purpose                                                                          |

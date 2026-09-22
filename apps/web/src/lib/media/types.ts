@@ -29,8 +29,19 @@ export interface MediaSession {
 
 export interface MediaSnapshot {
   participants: MediaParticipant[];
-  /** Set when the call dropped or could not be joined. Never blocks the game. */
+  /**
+   * The call is over: it dropped, or it could not be joined. Whoever reads
+   * this must assume nothing is being published any more, so only report it
+   * when that is true. Never blocks the game.
+   */
   error: string | null;
+  /**
+   * Something failed without ending the call — a speaker this browser will
+   * not switch, a camera it will not open. The call carries on, and saying
+   * otherwise would tell a player they had left while still on air.
+   * Delivered once, not held.
+   */
+  notice: string | null;
   connected: boolean;
   reconnecting: boolean;
 }
