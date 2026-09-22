@@ -1,6 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { MediaService } from "../services/MediaService.js";
 import { createMediaProvider } from "../services/media/index.js";
+import { InviteService } from "../services/InviteService.js";
+import { createInviteProvider } from "../services/invite/index.js";
 import { env } from "../config/env.js";
 
 /**
@@ -10,10 +12,16 @@ import { env } from "../config/env.js";
  */
 export async function mediaRoutes(
   fastify: FastifyInstance,
-  options: { media?: MediaService } = {},
+  options: { media?: MediaService; invites?: InviteService } = {},
 ) {
   const media =
     options.media ??
     new MediaService(createMediaProvider(env), env.MEDIA_TOKEN_TTL_SECONDS);
+  const invites =
+    options.invites ??
+    new InviteService(createInviteProvider(env), env.WEB_URL);
   fastify.get("/media/config", async () => media.config());
+  // Tells the web app which invitations the server can send itself. The rest
+  // are handed to the player's own mail or messaging app.
+  fastify.get("/invite/config", async () => invites.config());
 }

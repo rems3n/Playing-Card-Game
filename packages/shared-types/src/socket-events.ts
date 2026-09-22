@@ -7,6 +7,7 @@ import type {
   VisibleGameState,
 } from "./game.js";
 import type { MediaCredentials, MediaErrorCode } from "./media.js";
+import type { InviteChannel } from "./invite.js";
 
 // ── Waiting room types ──
 
@@ -15,6 +16,8 @@ export interface WaitingRoomPlayer {
   displayName: string;
   avatarUrl: string | null;
   isHost: boolean;
+  /** Set by the player themselves. The host cannot start until all are ready. */
+  ready: boolean;
   seatIndex: number;
 }
 
@@ -76,6 +79,15 @@ export interface ClientToServerEvents {
   "room:join": (data: { roomId: string }) => void;
   "room:leave": (data: { roomId: string }) => void;
   "room:start": (data: { roomId: string }) => void;
+  "room:set_ready": (data: { roomId: string; ready: boolean }) => void;
+  /** Host only: free a seat held by someone who has stepped away. */
+  "room:remove_player": (data: { roomId: string; seatIndex: number }) => void;
+  /** Ask the server to send an invitation. Refused unless a sender is set up. */
+  "room:send_invite": (data: {
+    roomId: string;
+    channel: InviteChannel;
+    to: string;
+  }) => void;
 
   "invite:send": (data: {
     toUserId: string;
@@ -148,6 +160,7 @@ export interface ServerToClientEvents {
   "room:update": (state: WaitingRoomState) => void;
   "room:started": (data: { gameId: string }) => void;
   "room:error": (data: { message: string }) => void;
+  "room:invite_sent": (data: { channel: InviteChannel; to: string }) => void;
 
   "invite:received": (data: {
     invitationId: string;

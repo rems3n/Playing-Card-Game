@@ -57,6 +57,8 @@ Set these in each Railway service. Values below are placeholders, not credential
 | Both    | `PORT`                                     | Railway supplies this. Both processes bind on `0.0.0.0` and honor it.                                                                                                         |
 | Server  | `MEDIA_PROVIDER`                           | Optional. `none` (default) or `livekit`. Live audio and video stay off until this is set. See [MEDIA.md](MEDIA.md).                                                           |
 | Server  | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | Required when `MEDIA_PROVIDER=livekit`. Runtime variables only; they never reach the browser.                                                                     |
+| Server  | `INVITE_PROVIDER`                          | Optional. `none` (default) or `resend`. Without it the lobby opens the player's own mail or messaging app. See [INVITES.md](INVITES.md).                                      |
+| Server  | `RESEND_API_KEY`, `INVITE_FROM_EMAIL`      | Required when `INVITE_PROVIDER=resend`. Runtime variables only.                                                                                                              |
 
 Keep secrets as runtime variables; do not put them into Docker build arguments.
 Only the public backend URL is intentionally baked into the browser bundle.

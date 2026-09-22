@@ -155,6 +155,12 @@ export async function openTable(
     guest.emit("room:join", { roomId });
     await joined;
   }
+  // Everyone says they are ready; the host cannot start until they have.
+  for (const player of clients) {
+    const acknowledged = event(player, "room:update");
+    player.emit("room:set_ready", { roomId, ready: true });
+    await acknowledged;
+  }
   const started = event(clients[0], "room:started");
   clients[0].emit("room:start", { roomId });
   const { gameId } = await started;

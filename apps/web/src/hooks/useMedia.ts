@@ -14,29 +14,13 @@ import type {
   MediaSnapshot,
 } from "@/lib/media/types";
 import { useSocket } from "./useSocket";
+import { useServerConfig } from "./useServerConfig";
 
-const SERVER = process.env.NEXT_PUBLIC_SERVER_URL ?? "http://localhost:3001";
+const MEDIA_OFF: MediaConfig = { enabled: false, provider: "none" };
 
 /** Asks the server once whether call controls should exist at all. */
 export function useMediaConfig(fetcher: typeof fetch | null = null) {
-  const [config, setConfig] = useState<MediaConfig | null>(null);
-  useEffect(() => {
-    let live = true;
-    if (!fetcher && typeof fetch !== "function") return;
-    // Wrapped, not passed by reference: a detached fetch throws in browsers.
-    const get: typeof fetch = fetcher ?? ((...args) => fetch(...args));
-    get(`${SERVER}/media/config`)
-      .then((response) => (response.ok ? response.json() : null))
-      .then((value: MediaConfig | null) => {
-        if (live) setConfig(value ?? { enabled: false, provider: "none" });
-      })
-      // A server that cannot answer means no call controls, nothing worse.
-      .catch(() => live && setConfig({ enabled: false, provider: "none" }));
-    return () => {
-      live = false;
-    };
-  }, [fetcher]);
-  return config;
+  return useServerConfig<MediaConfig>("/media/config", MEDIA_OFF, fetcher);
 }
 
 export interface MediaController {

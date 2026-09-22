@@ -3,6 +3,8 @@ import { GameType, type WaitingRoomState } from "@card-game/shared-types";
 import { RoomService } from "../services/RoomService.js";
 import { GameService } from "../services/GameService.js";
 import { setupGameHandlers } from "../socket/gameRoom.js";
+import { InviteService } from "../services/InviteService.js";
+import type { InviteMessage } from "../services/invite/InviteProvider.js";
 
 vi.mock("../services/PersistenceService.js", () => ({
   PersistenceService: class {},
@@ -18,7 +20,7 @@ vi.mock("../services/MatchmakingService.js", () => ({
 
 // Exercise the real registered handlers; only the network transport and storage
 // are in memory. Distinct clients intentionally have the same display name.
-function fixture() {
+function fixture(options: { invites?: InviteService } = {}) {
   type Handler = (data: any) => unknown;
   const clients = new Map<string, ReturnType<typeof connect>>();
   let onConnection: Handler;
@@ -53,6 +55,8 @@ function fixture() {
     io as unknown as Parameters<typeof setupGameHandlers>[0],
     service,
     rooms,
+    undefined,
+    options.invites,
   );
   function connect(id: string, participantId = id) {
     const handlers = new Map<string, Handler>();
@@ -84,7 +88,12 @@ function fixture() {
     onConnection(client);
     return client;
   }
-  return { connect, service, create, rooms };
+  /** Everyone says they are ready. The host cannot start before that. */
+  async function allReady(roomId: string, ...players: ReturnType<typeof connect>[]) {
+    for (const player of players)
+      await player.send("room:set_ready", { roomId, ready: true });
+  }
+  return { connect, service, create, rooms, allReady };
 }
 
 describe("waiting room regressions", () => {
@@ -112,12 +121,13 @@ describe("waiting room regressions", () => {
   });
 
   it("creates only one game for overlapping start requests", async () => {
-    const { connect, create } = fixture();
+    const { connect, create, allReady } = fixture();
     const host = connect("host");
     const guest = connect("guest");
     await host.send("room:create", { gameType: GameType.Euchre });
     const { roomId } = host.last("room:created");
     await guest.send("room:join", { roomId });
+    await allReady(roomId, host, guest);
     await Promise.all([
       host.send("room:start", { roomId }),
       host.send("room:start", { roomId }),
@@ -130,12 +140,13 @@ describe("waiting room regressions", () => {
   });
 
   it("reports start failures and allows retry", async () => {
-    const { connect, service } = fixture();
+    const { connect, service, allReady } = fixture();
     const host = connect("host");
     const guest = connect("guest");
     await host.send("room:create", { gameType: GameType.Euchre });
     const { roomId } = host.last("room:created");
     await guest.send("room:join", { roomId });
+    await allReady(roomId, host, guest);
     vi.spyOn(service, "startGame").mockRejectedValueOnce(
       new Error("Storage unavailable"),
     );
@@ -146,7 +157,7 @@ describe("waiting room regressions", () => {
   });
 
   it("restores the same guest seat after refresh and refuses duplicate seats", async () => {
-    const { connect } = fixture();
+    const { connect, allReady } = fixture();
     const host = connect("host", "stable-host");
     const guest = connect("guest", "stable-guest");
     await host.send("room:create", {
@@ -159,6 +170,7 @@ describe("waiting room regressions", () => {
     await refreshed.send("room:join", { roomId });
     expect(refreshed.last("room:update").players).toHaveLength(2);
     expect(refreshed.last("room:update").mySeat).toBe(0);
+    await allReady(roomId, refreshed, guest);
     await host.send("room:start", { roomId });
     expect(host.last("room:error").message).toContain("Only the host");
     await refreshed.send("room:start", { roomId });

@@ -18,6 +18,8 @@ import {
   MediaService,
 } from "../services/MediaService.js";
 import { createMediaProvider } from "../services/media/index.js";
+import { InviteError, InviteService } from "../services/InviteService.js";
+import { createInviteProvider } from "../services/invite/index.js";
 import { env } from "../config/env.js";
 
 type GameSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
@@ -29,6 +31,10 @@ const matchmakingService = new MatchmakingService();
 const defaultMediaService = new MediaService(
   createMediaProvider(env),
   env.MEDIA_TOKEN_TTL_SECONDS,
+);
+const defaultInviteService = new InviteService(
+  createInviteProvider(env),
+  env.WEB_URL,
 );
 
 const PLAYERS_PER_GAME: Record<string, number> = {
@@ -63,6 +69,7 @@ export function setupGameHandlers(
   gameService: GameService,
   rooms = new RoomService(),
   media: MediaService = defaultMediaService,
+  invites: InviteService = defaultInviteService,
 ): void {
   io.on("connection", (socket: GameSocket) => {
     console.log(`Client connected: ${socket.id}`);
@@ -404,7 +411,9 @@ export function setupGameHandlers(
             throw new Error("Room is full");
           if (existing) {
             io.sockets.sockets.get(existing.socketId)?.leave(`room:${room.id}`);
+            // Keep the seat and the ready flag: a refresh is not a change of mind.
             Object.assign(existing, participant(), {
+              ready: existing.ready === true,
               disconnectedAt: undefined,
             });
           } else room.players.push(participant());
@@ -436,6 +445,72 @@ export function setupGameHandlers(
         roomError(err);
       }
     });
+    socket.on("room:set_ready", async (data) => {
+      try {
+        await rooms.queue.run(String(data.roomId).toLowerCase(), async () => {
+          const room = await loadRoom(data.roomId);
+          if (!room || room.gameId) return;
+          const player = room.players.find(
+            (p) => p.id === participantId && p.socketId === socket.id,
+          );
+          if (!player) throw new Error("You are not at this table");
+          player.ready = data.ready === true;
+          await rooms.save(room);
+          broadcastRoomState(io, room);
+        });
+      } catch (err) {
+        roomError(err);
+      }
+    });
+
+    // Host control: free a seat held by someone who has stepped away, so the
+    // table is not stuck waiting for a person who is not coming back.
+    socket.on("room:remove_player", async (data) => {
+      try {
+        await rooms.queue.run(String(data.roomId).toLowerCase(), async () => {
+          const room = await loadRoom(data.roomId);
+          if (!room || room.gameId) return;
+          if (room.hostId !== participantId)
+            throw new Error("Only the host can free a seat");
+          const player = room.players[data.seatIndex];
+          if (!player) throw new Error("There is nobody in that seat");
+          if (player.id === participantId)
+            throw new Error("Leave the room to give up your own seat");
+          room.players = room.players.filter((p) => p !== player);
+          const removed = io.sockets.sockets.get(player.socketId);
+          await removed?.leave(`room:${room.id}`);
+          if (removed) delete removed.data.waitingRoomId;
+          removed?.emit("room:error", {
+            message: "The host freed your seat at that table.",
+          });
+          await rooms.save(room);
+          broadcastRoomState(io, room);
+        });
+      } catch (err) {
+        roomError(err);
+      }
+    });
+
+    socket.on("room:send_invite", async (data) => {
+      try {
+        const room = await loadRoom(data?.roomId);
+        const sent = await invites.send(
+          room,
+          participantId,
+          data?.channel,
+          data?.to,
+        );
+        socket.emit("room:invite_sent", sent);
+      } catch (err) {
+        socket.emit("room:error", {
+          message:
+            err instanceof InviteError
+              ? err.message
+              : "The invitation could not be sent. Share the link instead.",
+        });
+      }
+    });
+
     socket.on("room:start", async (data) => {
       let started: string | undefined;
       try {
@@ -454,6 +529,11 @@ export function setupGameHandlers(
             throw new Error("Need at least 2 players");
           if (room.players.some((p) => !io.sockets.sockets.has(p.socketId)))
             throw new Error("Wait for everyone to reconnect before starting");
+          const waiting = room.players.filter((p) => p.ready !== true);
+          if (waiting.length)
+            throw new Error(
+              `Waiting for ${waiting.map((p) => p.displayName).join(" and ")} to be ready`,
+            );
           const gameId = gameService.createGame(room.gameType, room.config);
           try {
             for (const player of room.players) {
@@ -1041,6 +1121,7 @@ function toRoomState(room: FamilyRoom, socketId: string): WaitingRoomState {
       avatarUrl: null,
       isHost: p.id === room.hostId,
       connected: p.connected,
+      ready: p.ready === true,
       seatIndex: i,
     })),
     maxPlayers: room.maxPlayers,

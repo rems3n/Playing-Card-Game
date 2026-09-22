@@ -8,6 +8,8 @@ export interface RoomPlayer {
   userId: string | null;
   displayName: string;
   connected: boolean;
+  /** The player says when they are ready. Absent on rooms saved before this. */
+  ready?: boolean;
   disconnectedAt?: number;
 }
 export interface FamilyRoom {

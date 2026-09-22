@@ -23,6 +23,11 @@ export const env = {
     process.env.MEDIA_TOKEN_TTL_SECONDS ?? "300",
     10,
   ),
+  // Sending invitations. Without a sender the table still invites people: the
+  // browser hands the message to the player's own mail or messaging app.
+  INVITE_PROVIDER: process.env.INVITE_PROVIDER ?? "none",
+  RESEND_API_KEY: process.env.RESEND_API_KEY ?? "",
+  INVITE_FROM_EMAIL: process.env.INVITE_FROM_EMAIL ?? "",
 };
 
 if (process.env.NODE_ENV === "production") {

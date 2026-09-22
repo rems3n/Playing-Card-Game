@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import { useSocket } from "@/hooks/useSocket";
 import { connectPlayer, useConnection } from "@/components/ConnectionProvider";
 import type { WaitingRoomState } from "@card-game/shared-types";
+import { InvitePanel, useInviteConfig } from "@/components/lobby/InvitePanel";
 
 export default function WaitingRoom() {
   const { id } = useParams<{ id: string }>();
@@ -16,8 +17,8 @@ export default function WaitingRoom() {
   const [name, setName] = useState("");
   const [room, setRoom] = useState<WaitingRoomState | null>(null);
   const [error, setError] = useState("");
-  const [copied, setCopied] = useState(false);
   const [starting, setStarting] = useState(false);
+  const invites = useInviteConfig();
   useEffect(() => {
     const update = (state: WaitingRoomState) => {
       if (state.roomId === id) {
@@ -53,15 +54,15 @@ export default function WaitingRoom() {
     }, 15000);
     return () => clearTimeout(timer);
   }, [starting]);
-  const host = room?.players.find((p) => p.seatIndex === room.mySeat)?.isHost;
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(`${location.origin}/room/${id}`);
-      setCopied(true);
-    } catch {
-      setError("Copy the room code below and share it with your group.");
-    }
-  }
+  const me = room?.players.find((p) => p.seatIndex === room.mySeat);
+  const host = me?.isHost;
+  const notReady = room?.players.filter((p) => !p.ready) ?? [];
+  const gameName =
+    room?.gameType === "seven-six"
+      ? "Seven-Six"
+      : room?.gameType === "euchre"
+        ? "45s / Euchre"
+        : "cards";
   return (
     <div className="waiting-page">
       <Link className="text-link" href="/">
@@ -151,10 +152,30 @@ export default function WaitingRoom() {
                     </strong>
                     <small>
                       {player
-                        ? `${player.isHost ? "Host · " : ""}${player.connected === false ? "Reconnecting" : "Ready to play"}`
+                        ? `${player.isHost ? "Host · " : ""}${
+                            player.connected === false
+                              ? "Reconnecting"
+                              : player.ready
+                                ? "Ready"
+                                : "Not ready yet"
+                          }`
                         : "A bot joins here when the game starts"}
                     </small>
                   </div>
+                  {host && player && i !== room.mySeat && (
+                    <button
+                      className="button secondary seat-action"
+                      disabled={!connection.connected}
+                      onClick={() =>
+                        socket.emit("room:remove_player", {
+                          roomId: id,
+                          seatIndex: i,
+                        })
+                      }
+                    >
+                      Free seat
+                    </button>
+                  )}
                   <span className="seat-number">
                     {room.gameType === "euchre"
                       ? `Team ${(i % 2) + 1}`
@@ -168,8 +189,10 @@ export default function WaitingRoom() {
           )}
           <p className="setup-note">
             {host
-              ? "Start when everyone is here. At least two people are needed; bots fill any remaining seats."
-              : `Waiting for ${room?.host ?? "the host"} to start the game.`}
+              ? notReady.length
+                ? `Waiting for ${notReady.map((p) => (p.seatIndex === room?.mySeat ? "you" : p.displayName)).join(" and ")}. At least two people are needed; bots fill any remaining seats.`
+                : "Everyone is ready. Bots fill any remaining seats."
+              : `${room?.host ?? "The host"} starts the game once everyone is ready.`}
           </p>
           <div className="waiting-actions">
             <button
@@ -182,6 +205,19 @@ export default function WaitingRoom() {
             >
               Leave room
             </button>
+            <button
+              className={`button ${me?.ready ? "secondary" : "primary"} ready-toggle`}
+              aria-pressed={me?.ready === true}
+              disabled={!connection.connected || !me}
+              onClick={() =>
+                socket.emit("room:set_ready", {
+                  roomId: id,
+                  ready: !me?.ready,
+                })
+              }
+            >
+              {me?.ready ? "Not ready" : "I'm ready"}
+            </button>
             {host && (
               <button
                 className="button primary"
@@ -190,6 +226,7 @@ export default function WaitingRoom() {
                   !connection.connected ||
                   !room ||
                   room.players.length < 2 ||
+                  notReady.length > 0 ||
                   room.players.some((p) => p.connected === false)
                 }
                 onClick={() => {
@@ -202,32 +239,12 @@ export default function WaitingRoom() {
             )}
           </div>
         </section>
-        <aside className="panel invitation-panel">
-          <span className="round-icon" aria-hidden>
-            ↗
-          </span>
-          <h2>Bring everyone in.</h2>
-          <p>Share the link or the room code with your friends and family.</p>
-          <label>
-            ROOM CODE
-            <input
-              readOnly
-              value={id}
-              onFocus={(e) => e.target.select()}
-              aria-label="Room code"
-            />
-          </label>
-          <button className="button primary full" onClick={copy}>
-            {copied ? "Link copied ✓" : "Copy invite link"}
-          </button>
-          <p className="small-note">
-            Only people with your invitation can find this table. Room links
-            expire after 24 hours of inactivity.
-          </p>
-          <Link href="/rules" className="text-link">
-            Review the rules →
-          </Link>
-        </aside>
+        <InvitePanel
+          roomId={id}
+          gameName={gameName}
+          myName={me?.displayName ?? name}
+          canSend={invites?.channels ?? []}
+        />
       </div>
     </div>
   );

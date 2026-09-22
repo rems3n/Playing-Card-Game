@@ -119,6 +119,11 @@ describe("real authenticated Socket.IO gameplay", () => {
         next = event(guest, "room:error");
         guest.emit("room:start", { roomId });
         expect((await next).message).toContain("host");
+        for (const player of [host, guest]) {
+          const acknowledged = event(player, "room:update");
+          player.emit("room:set_ready", { roomId, ready: true });
+          await acknowledged;
+        }
         const started = event(host, "room:started");
         host.emit("room:start", { roomId });
         const { gameId } = await started;

@@ -1319,7 +1319,7 @@ input::placeholder {
   color: #6d7866;
   margin: 14px 0;
 }
-.invitation-panel input {
+.invitation-panel .room-code-field input {
   letter-spacing: 4px;
   font-family: monospace;
   text-align: center;
@@ -2144,4 +2144,90 @@ input::placeholder {
 }
 .media-tile.muted-for-me {
   opacity: 0.68;
+}
+
+/* ── Lobby: ready state, host controls and invitations ─────────────────────── */
+.waiting-actions {
+  flex-wrap: wrap;
+}
+.waiting-actions .button {
+  min-height: 44px;
+  touch-action: manipulation;
+}
+.ready-toggle[aria-pressed="true"] {
+  border-color: #2d6447;
+  color: #2d6447;
+}
+.seat-action {
+  margin-left: auto;
+  min-height: 44px;
+  padding: 0 10px;
+  font-size: 12px;
+  touch-action: manipulation;
+}
+.seat-action + .seat-number {
+  margin-left: 10px;
+}
+.invite-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 14px 0;
+}
+.invite-channels {
+  display: flex;
+  gap: 8px;
+}
+.invite-channels button {
+  flex: 1;
+  min-height: 44px;
+  border: 1px solid #c5cfbf;
+  border-radius: 8px;
+  background: #f2f4ee;
+  font-size: 14px;
+  touch-action: manipulation;
+}
+.invite-channels button[aria-pressed="true"] {
+  background: #2d6447;
+  border-color: #2d6447;
+  color: white;
+}
+.invite-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #6d7866;
+}
+.invite-form input {
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #c5cfbf;
+  border-radius: 8px;
+  font-size: 15px;
+  letter-spacing: normal;
+  text-transform: none;
+}
+.invitation-panel .invite-form .button {
+  margin: 0;
+}
+.room-code-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: #6d7866;
+  margin-top: 16px;
+}
+@media (max-width: 760px) {
+  .waiting-actions .button {
+    flex: 1 1 140px;
+  }
+  .seat-action {
+    font-size: 11px;
+    padding: 0 8px;
+  }
 }
