@@ -2070,6 +2070,11 @@ input::placeholder {
   .media-panel:not(.open) .media-heading {
     justify-content: flex-start;
   }
+  /* The table header carries the call control on a phone, so the panel's own
+     copy of it would be the same button twice, one above the other. */
+  .media-panel .media-toggle {
+    display: none;
+  }
   .media-panel.open {
     /* Capped so the felt shrinks instead of the hand dock moving off screen. */
     max-height: 38dvh;

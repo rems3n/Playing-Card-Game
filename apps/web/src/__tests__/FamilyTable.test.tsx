@@ -243,6 +243,27 @@ describe("compact table menu", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Back to game" }));
     expect(screen.queryByRole("dialog", { name: /^Table$/ })).toBeNull();
   });
+  it("offers the call from the table itself, not only from the menu", async () => {
+    const user = userEvent.setup();
+    mediaEnabled.value = true;
+    render(<GameBoard />);
+    // A phone never draws the call panel until it is opened, so the entry has
+    // to be on the table or nobody finds it.
+    const call = screen.getByRole("button", { name: "Join the table call" });
+    expect(call.getAttribute("aria-expanded")).toBe("false");
+    await user.click(call);
+    const open = screen.getByRole("button", { name: "Hide the table call" });
+    expect(open.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByLabelText("Table call").className).toContain("open");
+    await user.click(open);
+    expect(screen.getByLabelText("Table call").className).not.toContain("open");
+
+    cleanup();
+    mediaEnabled.value = false;
+    render(<GameBoard />);
+    expect(screen.queryByRole("button", { name: /table call/i })).toBeNull();
+    mediaEnabled.value = false;
+  });
   it("offers a call from the table menu only where the server has one", async () => {
     const user = userEvent.setup();
     mediaEnabled.value = false;

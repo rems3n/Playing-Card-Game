@@ -324,6 +324,19 @@ familyGame && !done && (
           <button className="button secondary desktop-table-action" onClick={() => setLeave(true)}>
             Leave table
           </button>
+          {/* On a phone the call panel is not drawn until it is opened, so
+              without this the only way to start a call is to find it inside
+              the Table menu. Desktop already shows the panel's own toggle. */}
+          {mediaConfig?.enabled && (
+            <button
+              className="button secondary mobile-table-action"
+              aria-expanded={callOpen}
+              aria-label={callOpen ? "Hide the table call" : "Join the table call"}
+              onClick={() => setCallOpen((was) => !was)}
+            >
+              {callOpen ? "Hide call" : media.status === "connected" ? "Show call" : "Call"}
+            </button>
+          )}
           <button className="button secondary mobile-table-action" onClick={() => setMenuOpen(true)} aria-label="Table menu: scores and settings">Table</button>
         </div>
       </div>

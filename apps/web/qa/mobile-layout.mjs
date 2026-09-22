@@ -296,21 +296,19 @@ for (const size of sizes) {
 
     // With a media provider configured, the call panel must take space from
     // the felt and never cover the hand, the bid tiles or the action buttons.
-    // A phone opens the call from the Table menu; the panel is not drawn until
-    // then, so that a table without a call costs no height.
-    await page.getByRole("button", { name: /Table menu/i }).click();
-    await page.waitForTimeout(400);
-    // The entry only exists where a media provider is configured; without one
-    // there is nothing to open and nothing should offer to.
-    const callEntry = page.getByRole("button", { name: /^(Call|Show call)$/ });
-    if (await callEntry.count()) {
-      await callEntry.first().click();
+    // A phone opens the call from the table header: the panel is not drawn
+    // until then, so a table without a call costs no height. The header is the
+    // only call control a player can see on a phone — the panel's own toggle
+    // is hidden there as a duplicate — so a missing header button means the
+    // call is unreachable, which is how it shipped once already.
+    const callButton = page.getByRole("button", { name: /the table call/ });
+    if (await callButton.count()) {
+      await callButton.click();
       await page.waitForTimeout(500);
-      const callToggle = page.locator(".media-panel .media-toggle");
       await step("call panel open");
       const overlaps = await page.evaluate(() => {
         const call = document.querySelector(".media-panel");
-        if (!call) return [];
+        if (!call) return ["the call panel was never drawn"];
         const a = call.getBoundingClientRect();
         const guarded = ".hand-cards, .hand-action, .bid-options, .bidding-panel button[type=submit], .round-result button";
         return [...document.querySelectorAll(guarded)]
@@ -328,12 +326,14 @@ for (const size of sizes) {
         failures.push(
           `${size.name} | call panel | covers gameplay controls: ${overlaps.join(", ")}`,
         );
-      await callToggle.click();
+      // Joining is what the button is for, so it has to be reachable too.
+      const join = page.getByRole("button", { name: /Join the call/ });
+      if (!(await join.count()))
+        failures.push(`${size.name} | call panel | no way to join the call`);
+      await page.getByRole("button", { name: "Hide the table call" }).click();
       await page.waitForTimeout(400);
       await step("call panel closed");
     } else {
-      await page.getByRole("button", { name: /Back to game/ }).click();
-      await page.waitForTimeout(300);
       console.log("  [call panel] no media provider configured; skipped");
     }
 

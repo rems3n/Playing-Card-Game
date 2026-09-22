@@ -16,7 +16,10 @@ Drives a complete Seven-Six hand at five phone viewports in Chromium with
 - overlapping hand cards
 - touch targets under 44px (hand cards are measured separately, see below)
 - a call panel that covers the hand, the bid tiles or the round-end action,
-  where a media provider is configured
+  a missing **Call** button in the table header, or no way to join once open —
+  all only where a media provider is configured. Run the suite with
+  `MEDIA_PROVIDER=livekit` and a `wss://` URL on the game server to exercise
+  these; with media off the call steps say so and are skipped.
 - flow breaks: Escape not closing a dialog, a bid submitted before one is
   chosen, a lost scoring pause on reload, auto-deal not toggling, "Deal next
   hand" not starting the next hand, or leaving not returning to the games page

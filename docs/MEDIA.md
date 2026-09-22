@@ -79,11 +79,15 @@ Layout, which the phone-viewport suite checks at 320x568 through 844x390:
 
 - Desktop: a collapsible panel at the top of the right-hand column. The table
   stays the primary surface and closing the call changes nothing else.
-- Phone, portrait: the call is opened from the Table menu and appears under the
-  trump strip, taking its height from the felt. It is capped at 38% of the
-  viewport (32% on short screens) and is not drawn at all until someone is in a
-  call, so a table without one costs no height. It never sits over the hand, the
-  bid tiles, Play card or Deal next hand.
+- Phone, portrait: the call is opened with the **Call** button in the table
+  header, beside Table. That button is the whole reason a player finds the call
+  at all: the panel is not drawn until it is opened, so before the header button
+  existed the only route was an entry inside the Table menu, and in real use it
+  was simply never found. The panel's own toggle is hidden on phones as a
+  duplicate of the header one; on desktop it remains the control. Opened, the
+  call appears under the trump strip and takes its height from the felt, capped
+  at 38% of the viewport (32% on short screens). It never sits over the hand,
+  the bid tiles, Play card or Deal next hand.
 - Phone, landscape: there are no spare rows, so an open call floats over the
   felt, anchored left and width-capped so it cannot reach the hand column.
 - `adaptiveStream` and `dynacast` are on, so the SFU drops video layers before
