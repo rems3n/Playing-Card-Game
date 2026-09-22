@@ -6,8 +6,9 @@ Chess.com-inspired web and mobile platform for playing card games online.
 
 Redevelopment is underway for **7/6 and 45s / Euchre**, using the existing Euchre
 rules as the baseline. The new hosting target is Railway for both web and server;
-the live website has not been migrated. See the [redevelopment backlog](docs/REDEVELOPMENT.md)
-and [Railway deployment guide](docs/RAILWAY.md). Identity, reconnects, durable rooms,
+the live website has not been migrated. See the [redevelopment backlog](docs/REDEVELOPMENT.md),
+the [Railway deployment guide](docs/RAILWAY.md), the [QA and defect review](docs/FAMILY-GAME-QA.md)
+and the [live audio and video notes](docs/MEDIA.md). Identity, reconnects, durable rooms,
 score storage, and the responsive redesign remain release blockers.
 
 ## Existing features (being rebuilt)
@@ -37,7 +38,8 @@ score storage, and the responsive redesign remain release blockers.
 | Auth | NextAuth.js v5 (Google OAuth) |
 | AI | Custom (Random, Heuristic, Monte Carlo) |
 | Ratings | Glicko-2 |
-| Testing | Vitest (126 tests across engine, AI, and server) |
+| Media | Optional WebRTC through an SFU behind a provider abstraction (LiveKit); off unless configured |
+| Testing | Vitest, plus a Chromium phone-viewport suite (`npm run qa:mobile` in `apps/web`) |
 | Hosting | Railway target for web, server, Postgres, Redis; existing web deployment remains on Vercel |
 
 ## Project Structure
@@ -94,12 +96,22 @@ cd apps/web && npm run dev       # Web app on :3000
 ### Testing
 
 ```bash
-# Run all 62 tests
-npx turbo run test --filter=@card-game/game-engine
+# Every workspace
+npm test
+
+# Database and Redis durability (needs both running)
+RUN_DURABILITY_TESTS=1 npm run test --workspace=@card-game/server -- \
+  src/__tests__/Durability.integration.test.ts
+
+# Phone viewports against a running local stack (Chromium, real layout)
+cd apps/web && npm run qa:mobile
 
 # Build all packages
 npx turbo run build
 ```
+
+See [apps/web/qa/README.md](apps/web/qa/README.md) for what the viewport suite
+checks and what still needs a physical device.
 
 ## Deployment
 

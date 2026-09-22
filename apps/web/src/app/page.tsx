@@ -90,18 +90,19 @@ export default function Home() {
     <div className="home-page">
       <section className="hero">
         <div>
-          <p className="eyebrow">GOOD COMPANY. A GREAT HAND.</p>
+          <p className="eyebrow">CARD GAMES ONLINE</p>
           <h1>
-            Cards with family
+            Seven-Six
             <br />
-            &amp; friends.
+            and 45s.
           </h1>
           <p className="hero-copy">
-            Your favorite games, wherever everyone is.
-            <br className="desktop-only" /> Pull up a chair and deal a hand.
+            Trick-taking card games for 2 to 7 players.
+            <br className="desktop-only" /> Play with friends in a private room,
+            or against bots. No account needed.
           </p>
           <a href="#new-game" className="text-link">
-            Find your next game <span aria-hidden>↘</span>
+            Start a game <span aria-hidden>↘</span>
           </a>
         </div>
         <div className="hero-cards" aria-hidden>
@@ -117,15 +118,15 @@ export default function Home() {
             </span>
             <strong>♠</strong>
           </div>
-          <span className="hero-caption">A little friendly competition.</span>
+          <span className="hero-caption">Seven of hearts, ace of spades.</span>
         </div>
       </section>
       <div className="home-grid">
         <section id="new-game" className="panel setup-panel">
           <div className="section-heading">
             <div>
-              <p className="eyebrow">MAKE YOURSELF AT HOME</p>
-              <h2>Let’s play.</h2>
+              <p className="eyebrow">NEW GAME</p>
+              <h2>Start a game</h2>
             </div>
             <span className="small-note">No account needed</span>
           </div>
@@ -136,14 +137,14 @@ export default function Home() {
                 name: "Seven-Six",
                 symbol: "7 / 6",
                 meta: "2–7 players",
-                copy: "Call your tricks. Make your bid.",
+                copy: "Bid the tricks you expect to win. Make it exactly for a bonus.",
               },
               {
                 type: GameType.Euchre,
                 name: "45s / Euchre",
                 symbol: "♠",
                 meta: "4 players · Teams",
-                copy: "Pick a partner. Take the tricks.",
+                copy: "Partners sit opposite each other. First team to 10 points wins.",
               },
             ].map((g) => (
               <button
@@ -187,7 +188,7 @@ export default function Home() {
                 onChange={(e) => setName(e.target.value)}
                 maxLength={50}
                 autoComplete="nickname"
-                placeholder="What should we call you?"
+                placeholder="Your name"
               />
             </label>
             <label>
@@ -251,8 +252,8 @@ export default function Home() {
             <span className="round-icon" aria-hidden>
               ↗
             </span>
-            <h2>Got an invite?</h2>
-            <p>Enter the room code to join your people.</p>
+            <h2>Join a game</h2>
+            <p>Enter the 8-character room code you were sent.</p>
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -279,14 +280,13 @@ export default function Home() {
             </form>
           </section>
           <section className="learn-panel">
-            <span className="eyebrow">NEW TO THE TABLE?</span>
-            <h2>A quick refresher.</h2>
+            <span className="eyebrow">RULES</span>
+            <h2>How to play</h2>
             <p>
-              Learn the bids, the tricks, and how to win. The rules are always
-              one tap away.
+              Bidding, trick-taking and scoring, for both games.
             </p>
             <Link className="text-link" href="/rules">
-              Explore the rules <span aria-hidden>→</span>
+              Read the rules <span aria-hidden>→</span>
             </Link>
           </section>
           {resume && (

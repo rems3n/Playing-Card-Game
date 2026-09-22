@@ -65,6 +65,30 @@ const measure = ([minTouch, minHandCard]) => {
     })
     .map(describe);
 
+  // A control can sit inside the viewport and still be cut off by an ancestor
+  // that hides its overflow, which is how the game shell keeps its height.
+  const clipped = targets
+    .map((e) => {
+      const r = e.getBoundingClientRect();
+      for (let p = e.parentElement; p; p = p.parentElement) {
+        const s = w.getComputedStyle(p);
+        const scrolls = /auto|scroll|hidden/;
+        if (!scrolls.test(s.overflowY) && !scrolls.test(s.overflowX)) continue;
+        const b = p.getBoundingClientRect();
+        const cut =
+          (scrolls.test(s.overflowY) && (r.top < b.top - 0.5 || r.bottom > b.bottom + 0.5)) ||
+          (scrolls.test(s.overflowX) && (r.left < b.left - 0.5 || r.right > b.right + 0.5));
+        if (cut)
+          return {
+            ...describe(e),
+            clippedBy: String(p.className || p.tagName).slice(0, 40),
+            box: { y: Math.round(b.top), h: Math.round(b.height) },
+          };
+      }
+      return null;
+    })
+    .filter(Boolean);
+
   const cards = [...d.querySelectorAll(".hand-cards button")].filter(vis);
   const overlap = [];
   for (let i = 0; i < cards.length; i++) {
@@ -107,6 +131,7 @@ const measure = ([minTouch, minHandCard]) => {
     handCardSize: cards[0] ? box(cards[0]) : null,
     checked: targets.length,
     outside,
+    clipped,
     overlap,
     small,
     smallCards,
@@ -120,6 +145,7 @@ function check(size, step, m) {
   if (m.pageScrollY) found.push("vertical page scroll");
   if (m.handClipped) found.push(`hand row clipped (${m.handCards} cards)`);
   if (m.outside.length) found.push("outside viewport: " + JSON.stringify(m.outside));
+  if (m.clipped.length) found.push("cut off by a clipping ancestor: " + JSON.stringify(m.clipped));
   if (m.overlap.length) found.push("overlapping hand cards: " + JSON.stringify(m.overlap));
   if (m.small.length) found.push(`touch targets under ${MIN_TOUCH}px: ` + JSON.stringify(m.small));
   if (m.smallCards.length)
@@ -198,6 +224,17 @@ for (const size of sizes) {
     isMobile: true,
     hasTouch: true,
   });
+  // `next dev` renders a floating indicator in the bottom-left corner that a
+  // production build does not have. Hide it so it cannot swallow a tap.
+  await ctx.addInitScript(() => {
+    const hide = () => {
+      const style = document.createElement("style");
+      style.textContent = "nextjs-portal{display:none !important}";
+      document.head.appendChild(style);
+    };
+    if (document.head) hide();
+    else document.addEventListener("DOMContentLoaded", hide);
+  });
   const page = await ctx.newPage();
   page.on("pageerror", (e) => {
     console.log("    FAIL page error: " + e.message);
@@ -233,6 +270,48 @@ for (const size of sizes) {
     await waitPhase(page, "playing");
     await page.waitForTimeout(1200);
     await step("playing");
+
+    // With a media provider configured, the call panel must take space from
+    // the felt and never cover the hand, the bid tiles or the action buttons.
+    // A phone opens the call from the Table menu; the panel is not drawn until
+    // then, so that a table without a call costs no height.
+    await page.getByRole("button", { name: /Table menu/i }).click();
+    await page.waitForTimeout(400);
+    const callEntry = page.getByRole("button", { name: /^(Call|Show call)$/ });
+    if (await callEntry.count()) {
+      await callEntry.first().click();
+      await page.waitForTimeout(500);
+      const callToggle = page.locator(".media-panel .media-toggle");
+      await step("call panel open");
+      const overlaps = await page.evaluate(() => {
+        const call = document.querySelector(".media-panel");
+        if (!call) return [];
+        const a = call.getBoundingClientRect();
+        const guarded = ".hand-cards, .hand-action, .bid-options, .bidding-panel button[type=submit], .round-result button";
+        return [...document.querySelectorAll(guarded)]
+          .filter((e) => e.getBoundingClientRect().width > 0)
+          .filter((e) => {
+            const b = e.getBoundingClientRect();
+            return (
+              Math.min(a.right, b.right) > Math.max(a.left, b.left) + 0.5 &&
+              Math.min(a.bottom, b.bottom) > Math.max(a.top, b.top) + 0.5
+            );
+          })
+          .map((e) => String(e.className).slice(0, 40));
+      });
+      if (overlaps.length)
+        failures.push(
+          `${size.name} | call panel | covers gameplay controls: ${overlaps.join(", ")}`,
+        );
+      await callToggle.click();
+      await page.waitForTimeout(400);
+      await step("call panel closed");
+    } else {
+      await page.getByRole("button", { name: /Back to game/ }).click();
+      await page.waitForTimeout(300);
+      console.log("  [call panel] no media provider configured; skipped");
+    }
+
     await playOneCard(page);
 
     try {
@@ -306,9 +385,10 @@ for (const size of sizes) {
     if (new URL(page.url()).pathname !== "/")
       failures.push(`${size.name} | leave | did not return to the games page`);
   } catch (e) {
-    const line = e.message.split("\n")[0];
-    console.log("  FAIL flow: " + line);
-    failures.push(`${size.name} | flow | ${line}`);
+    // Keep the locator and the retry log: they say which control was stuck.
+    const detail = e.message.split("\n").slice(0, 6).join(" / ");
+    console.log("  FAIL flow: " + detail);
+    failures.push(`${size.name} | flow | ${detail}`);
   }
   await ctx.close();
 }

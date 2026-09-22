@@ -41,6 +41,7 @@ const PLAYERS_PER_GAME: Record<string, number> = {
 
 const disconnectTimers = new Map<string, NodeJS.Timeout>(); // `gameId:seat` → timer
 const RECONNECT_TIMEOUT = 30_000; // 30 seconds
+const MEDIA_TOKEN_INTERVAL = 3_000; // shortest gap between call tickets
 const MATCH_ACCEPT_TIMEOUT = 15_000; // 15 seconds to accept
 
 // Pending match proposals
@@ -628,11 +629,21 @@ export function setupGameHandlers(
     });
 
     // ── Call credentials for this table ──
+    // One ticket at a time per socket: a token is cheap to issue but it is the
+    // one thing here that reaches a paid third party.
+    let lastTokenAt = 0;
     // The seat, name, room and permissions are all decided here. A failure
     // returns an error the client can show beside the table; the card game is
     // never interrupted by it.
     socket.on("media:token", async (data) => {
       try {
+        const now = Date.now();
+        if (now - lastTokenAt < MEDIA_TOKEN_INTERVAL)
+          throw new MediaAuthorizationError(
+            "MEDIA_TOKEN_FAILED",
+            "Wait a moment before rejoining the call.",
+          );
+        lastTokenAt = now;
         const credentials = await media.issueCredentials(
           gameService,
           data?.gameId,

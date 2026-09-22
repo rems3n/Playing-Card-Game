@@ -45,6 +45,13 @@ export interface MediaParticipant {
   cameraOn: boolean;
   speaking: boolean;
   connection: MediaConnectionState;
+  /** Silenced for this listener only. Nobody else is affected. */
+  mutedForMe: boolean;
+}
+
+export interface MediaDevice {
+  deviceId: string;
+  label: string;
 }
 
 /**

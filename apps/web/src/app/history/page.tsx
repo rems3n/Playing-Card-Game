@@ -49,8 +49,8 @@ export default function HistoryPage() {
   }, [page, retry, connected]);
   return (
     <div className="history-page">
-      <p className="eyebrow">EVERY HAND HAS A STORY</p>
-      <h1>Your games.</h1>
+      <p className="eyebrow">GAME HISTORY</p>
+      <h1>Your games</h1>
       <p className="history-description">
         Completed games and the final scores. Guest history belongs to this
         browser’s player session; sign in before playing to keep future games
@@ -66,7 +66,7 @@ export default function HistoryPage() {
         <p role="status">Loading your games…</p>
       ) : !games.length && !error ? (
         <section className="panel empty-history">
-          <h2>Your next game is the first entry.</h2>
+          <h2>No games yet</h2>
           <p>Finish a game and the final score will appear here.</p>
           <Link className="button primary" href="/">
             Let’s play →

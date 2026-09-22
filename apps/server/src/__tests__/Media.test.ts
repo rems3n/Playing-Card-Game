@@ -287,6 +287,33 @@ describe("media over the game socket", () => {
     }
   }, 30000);
 
+  it("refuses a burst of ticket requests from one socket", async () => {
+    const { provider, requests } = recordingProvider();
+    const table = await openTable(GameType.SevenSix, {
+      seats: 4,
+      humans: 2,
+      media: new MediaService(provider, 90),
+    });
+    try {
+      const seated = await currentHuman(table);
+      const first = event(seated, "media:credentials");
+      seated.emit("media:token", { gameId: table.gameId });
+      await first;
+      const refused = event(seated, "media:error");
+      seated.emit("media:token", { gameId: table.gameId });
+      expect((await refused).message).toContain("Wait a moment");
+      expect(requests).toHaveLength(1);
+      // A different seat is unaffected by someone else's burst.
+      const other = table.clients.find((c) => c !== seated)!;
+      const issued = event(other, "media:credentials");
+      other.emit("media:token", { gameId: table.gameId });
+      await issued;
+      expect(requests).toHaveLength(2);
+    } finally {
+      await table.close();
+    }
+  }, 30000);
+
   it("reports that media is off without disturbing the game", async () => {
     const table = await openTable(GameType.SevenSix, {
       seats: 4,

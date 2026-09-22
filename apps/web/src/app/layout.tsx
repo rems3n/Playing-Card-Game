@@ -6,9 +6,9 @@ import { Sidebar } from "@/components/Sidebar";
 export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover" };
 
 export const metadata: Metadata = {
-  title: "CardArena · The family table",
+  title: "CardArena — Seven-Six and 45s",
   description:
-    "Play Seven-Six online — a trick-taking bidding card game for 2-7 players. Challenge AI or play with friends!",
+    "Play Seven-Six and 45s online. Trick-taking card games for 2 to 7 players, with friends in a private room or against bots.",
 };
 
 export default function RootLayout({

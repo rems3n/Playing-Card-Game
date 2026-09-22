@@ -43,11 +43,51 @@ socket's **signed session** carries. Everything else is read from server state:
   and `canUpdateOwnMetadata` are all withheld.
 - Tokens last `MEDIA_TOKEN_TTL_SECONDS` (300 by default): long enough to join
   and reconnect once, short enough to be worth little if it leaks.
+- A socket may request at most one ticket every three seconds. A token is cheap
+  to issue but it is the one thing here that reaches a paid third party.
 - Nothing is recorded or stored. No media passes through the API service, and
   no media is written to Postgres, Redis or disk.
 
 These properties are covered by `apps/server/src/__tests__/Media.test.ts`,
 including the exact grants inside an issued LiveKit token.
+
+## What a player sees
+
+The panel is provider-agnostic: it talks to `MediaSession`
+(`apps/web/src/lib/media/types.ts`), and `createLiveKitSession` is the only
+file that knows LiveKit exists. It is imported on demand, so a table without a
+call never downloads it.
+
+- Microphone and camera start **off**. Joining the call publishes nothing until
+  the player turns something on.
+- Mute, camera, output choice, pin-to-enlarge and leave. Leaving the call keeps
+  the seat at the table.
+- Each tile shows the name, whether the microphone is on, and whether that
+  person is reconnecting. The active speaker gets a quiet ring and whoever's
+  turn it is at the table gets a gold outline.
+- Any player can silence another **for themselves only**; nobody else is
+  affected and nothing is sent to the server. Host moderation is not built yet.
+- The output picker appears only where the browser allows a choice, which
+  excludes iOS Safari.
+- Every failure — a refusal, a provider outage, a dropped call, a camera the
+  browser will not open — appears as a dismissible message in the panel with
+  "You can keep playing", and the join control comes back. None of it touches
+  the game socket. `apps/web/src/__tests__/TableCall.test.tsx` drives all of
+  this against a fake session, with no browser, camera or server.
+
+Layout, which the phone-viewport suite checks at 320x568 through 844x390:
+
+- Desktop: a collapsible panel at the top of the right-hand column. The table
+  stays the primary surface and closing the call changes nothing else.
+- Phone, portrait: the call is opened from the Table menu and appears under the
+  trump strip, taking its height from the felt. It is capped at 38% of the
+  viewport (32% on short screens) and is not drawn at all until someone is in a
+  call, so a table without one costs no height. It never sits over the hand, the
+  bid tiles, Play card or Deal next hand.
+- Phone, landscape: there are no spare rows, so an open call floats over the
+  felt, anchored left and width-capped so it cannot reach the hand column.
+- `adaptiveStream` and `dynacast` are on, so the SFU drops video layers before
+  audio when a phone's connection degrades.
 
 ## Variables
 

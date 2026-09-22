@@ -68,7 +68,7 @@ export default function WaitingRoom() {
         ← Games
       </Link>
       <div className="waiting-intro">
-        <p className="eyebrow">THERE’S A SEAT FOR EVERYONE</p>
+        <p className="eyebrow">PRIVATE TABLE</p>
         <h1>
           {room?.gameType === "seven-six"
             ? "Seven-Six"
@@ -76,7 +76,7 @@ export default function WaitingRoom() {
               ? "45s / Euchre"
               : "Your private table"}
         </h1>
-        <p>Invite your people. We’ll hold your seats.</p>
+        <p>Share the room code below. Seats are held for people who join.</p>
       </div>
       {!connection.connected && (
         <p className="notice" role="status">

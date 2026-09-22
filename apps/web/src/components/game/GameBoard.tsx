@@ -17,6 +17,9 @@ import { RulesModal } from "../RulesModal";
 import { ChatPanel } from "./ChatPanel";
 import { Dialog } from "../Dialog";
 import { RummyBoard } from "./RummyBoard";
+import { MediaPanel } from "./MediaPanel";
+import { useMedia, useMediaConfig } from "@/hooks/useMedia";
+import { createLiveKitSession } from "@/lib/media/LiveKitSession";
 const symbols: Record<string, string> = { H: "♥", D: "♦", S: "♠", C: "♣" };
 const suits: Record<string, string> = {
   H: "hearts",
@@ -107,6 +110,13 @@ function FamilyTable() {
   const [leave, setLeave] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [callOpen, setCallOpen] = useState(false);
+  const mediaConfig = useMediaConfig();
+  const media = useMedia({
+    gameId,
+    enabled: !!mediaConfig?.enabled,
+    createSession: createLiveKitSession,
+  });
   const [pending, setPending] = useState(false);
   const [saveStatus, setSaveStatus] = useState<boolean | undefined>();
   const [disconnected, setDisconnected] = useState<{
@@ -118,6 +128,7 @@ function FamilyTable() {
     setSelected(null);
     setReviewOpen(false);
     setMenuOpen(false);
+    setCallOpen(false);
   }, [gameId]);
   useEffect(() => {
     const update = (next: NonNullable<typeof state>) => {
@@ -172,7 +183,7 @@ function FamilyTable() {
   if (!state || state.gameId !== gameId)
     return (
       <div className="empty-state">
-        <h1>Taking your seat…</h1>
+        <h1>Joining the table…</h1>
         <p role="status">
           {error || connection.message || "Loading the table."}
         </p>
@@ -290,7 +301,7 @@ familyGame && !done && (
     >
       <div className="game-heading">
         <div>
-          <p className="eyebrow">THE FAMILY TABLE</p>
+          <p className="eyebrow">{state.players.length} PLAYERS</p>
           <h1>{name}</h1>
         </div>
         <div className="game-heading-actions">
@@ -496,8 +507,8 @@ familyGame && !done && (
                   <span aria-hidden>♣</span>
                   <p>
                     {done
-                      ? "A good game. Good company."
-                      : "The next trick starts here."}
+                      ? "The game is over."
+                      : "Played cards appear here."}
                   </p>
                 </div>
               )}
@@ -585,6 +596,12 @@ familyGame && !done && (
           )}
         {autoDealControl}
         <aside className="table-aside">
+          <MediaPanel
+            media={media}
+            currentPlayerSeat={state.currentPlayerSeat}
+            open={callOpen}
+            onOpenChange={setCallOpen}
+          />
           {scorePanel}
           <details className="panel chat-details">
             <summary>Table chat</summary>
@@ -603,6 +620,9 @@ familyGame && !done && (
           {scorePanel}
           {autoDealControl}
           <div className="table-menu-actions">
+            <button className="button secondary" onClick={() => { setMenuOpen(false); setCallOpen(true); }}>
+              {media.status === "connected" ? "Show call" : "Call"}
+            </button>
             <button className="button secondary" onClick={() => { setMenuOpen(false); setRules(true); }}>Rules</button>
             <button className="button secondary" onClick={() => { setMenuOpen(false); setLeave(true); }}>Leave table</button>
           </div>

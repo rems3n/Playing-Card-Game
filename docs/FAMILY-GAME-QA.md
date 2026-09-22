@@ -4,6 +4,31 @@ Scope: the supported family web flows, Seven-Six (2–7 players), and the existi
 Euchre implementation labeled 45s / Euchre. Native app release certification,
 legacy Hearts/Spades/Rummy screens, and stronger AI are separate workstreams.
 
+## Phone-viewport pass (Chromium at real viewports, driving the running app)
+
+`apps/web/qa/mobile-layout.mjs` plays a complete Seven-Six hand at 320x568,
+390x664, 430x780, 844x390 and 390x540 with `isMobile` and touch on, and fails on
+page scrolling, controls outside the viewport, controls cut off by a clipping
+ancestor, overlapping hand cards, touch targets under 44px, and flow breaks.
+Run it with `npm run qa:mobile` in `apps/web` against a local stack. It is not a
+CI gate: it needs a server, a database and a browser.
+
+| Finding (measured, seven seats) | Correction |
+| --- | --- |
+| Bid tiles were 25–40px wide: the grid forced all eight onto one row | The grid wraps with a 46px minimum, so every tile is a full target at 320px |
+| "Deal next hand" sat below the viewport at 320x568 and 844x390, because the whole scoring panel scrolled | Only the per-player list scrolls; the action stays in view |
+| The Rules dialog close button was 36px tall; the auto-deal row 22px; "Retry connection" in a disconnect notice 90x18 | All are at least 44px now |
+| A seven-card hand was 37px per card at 320px | The hand panel spans the full viewport width on narrow phones: 42x60px at 320px, 44x64px at 390px and above |
+| The Table menu heading, holding "Back to game", scrolled away on short screens | It is sticky |
+| With the call panel present, the bidding panel was cut off by the felt at 390x540 | The panel drops its heading on short screens, the seat strip and opponent status hide during bidding, and the call is not drawn until someone is in a call |
+| `.table-layout` inherited the desktop grid's `align-items: start`, so the hand panel's full-bleed offset resolved against a content-sized parent and hung 6px off screen | The phone layout stretches its children |
+| Seven-Six preselected a bid of 1, so a mis-tap on Submit placed a bid nobody chose | No bid is preselected; Submit is disabled until one is picked, and a selection the dealer restriction later makes illegal is rejected |
+
+Residual, and stated rather than hidden: at 320px a seven-card hand gives 42x60px
+cards. Seven 44px cards plus readable gaps do not fit 320px. Playing a card stays
+two steps — select, then "Play card" — with the chosen card named in the action
+row, so a mis-tap is visible and recoverable.
+
 ## Defects fixed in this pass
 
 | Finding | Cause | Correction and regression check |
@@ -56,6 +81,17 @@ completed cards and winner feedback appear, own-seat trick counts agree with the
 scoreboard, and Last trick retains the cards and winner after play resumes.
 The automated timer regression verifies the 3.5-second hold. These checks do not
 constitute real phone, multi-person network, or native-app acceptance.
+
+## Live audio and video
+
+Off unless a provider is configured; see [MEDIA.md](MEDIA.md). Server-side
+authorization, token grants and refusal paths are covered by
+`apps/server/src/__tests__/Media.test.ts`; the panel, its controls and its
+failure handling by `apps/web/src/__tests__/TableCall.test.tsx` against a fake
+session. The phone-viewport suite opens and closes the call at every size and
+fails if it covers the hand, the bid tiles or the round-end action. No call has
+been placed against a real SFU from this repository: that needs LiveKit
+credentials and is part of the outstanding device acceptance.
 
 ## Remaining release work identified by review
 

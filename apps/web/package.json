@@ -15,6 +15,7 @@
     "@card-game/shared-store": "*",
     "@card-game/shared-types": "*",
     "jose": "^6.0.0",
+    "livekit-client": "^2.22.3",
     "next": "^16.3.5",
     "next-auth": "5.0.0-beta.32",
     "react": "^19.1.0",
