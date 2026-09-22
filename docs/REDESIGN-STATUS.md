@@ -51,6 +51,29 @@ User testing identified bidding and trick-presentation defects; their fixes and
 expanded coverage are documented in the QA report. Real-device acceptance remains
 required. Do not infer visual QA from a successful Next.js build.
 
+## This pass
+
+- A repeatable phone-viewport suite (`apps/web/qa/mobile-layout.mjs`) plays a
+  complete Seven-Six hand in Chromium at 320x568, 390x664, 430x780, 844x390 and
+  390x540 and fails on page scrolling, controls outside the viewport, controls
+  cut off by a clipping ancestor, overlapping hand cards, touch targets under
+  44px, and flow breaks. It found eight defects that are now fixed; see
+  [FAMILY-GAME-QA.md](FAMILY-GAME-QA.md) for the measurements.
+- Seven-Six no longer preselects a bid. Submit is disabled until a number is
+  chosen, so a mis-tap cannot place a bid nobody picked.
+- 76 new seeded engine tests cover bidding turn order, bid validation, the
+  dealer restriction, trump reservation across all 13 rounds, trick winners
+  against an independent calculation, dealer rotation, running totals and
+  restore equality, for every seat count from two to seven.
+- Eleven new socket tests cover a player leaving during bidding, during a trick
+  and during round scoring; several clients agreeing on the table; duplicate and
+  stale next-hand requests; and commands from someone without a seat.
+- Live audio and video exist behind a provider abstraction and are off unless
+  configured. See [MEDIA.md](MEDIA.md). No call has been placed against a real
+  SFU from this repository.
+- Interface copy is factual: the home, room, history and table headings say what
+  they are instead of selling the idea.
+
 ## Remaining release gates
 
 1. Isolated Railway staging and guest connections are running. Configure and verify
