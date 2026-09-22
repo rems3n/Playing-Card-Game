@@ -1,33 +1,52 @@
-import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuidv4 } from "uuid";
 import {
   type Card,
+  type CompletedTrick,
+  GameEventType,
   type GameConfig,
   type VisibleGameState,
   AIDifficulty,
   GamePhase,
   GameType,
   Suit,
-} from '@card-game/shared-types';
-import { HeartsEngine, SpadesEngine, EuchreEngine, RummyEngine, SevenSixEngine } from '@card-game/game-engine';
+} from "@card-game/shared-types";
+import {
+  HeartsEngine,
+  SpadesEngine,
+  FortyFivesEngine,
+  RummyEngine,
+  SevenSixEngine,
+} from "@card-game/game-engine";
 import {
   createAIPlayer,
   type AIPlayer,
-  shouldCallTrump,
-  chooseTrumpSuit,
+  fortyFivesBid,
+  fortyFivesTrump,
   findMelds,
   chooseDrawSource,
   sevenSixBid,
-} from '@card-game/ai';
-import { GameStateStore, type SerializedGame } from './GameStateStore.js';
+} from "@card-game/ai";
+import {
+  GameStateStore,
+  type SerializedGame,
+  type TrickReview,
+} from "./GameStateStore.js";
 
-type AnyEngine = HeartsEngine | SpadesEngine | EuchreEngine | RummyEngine | SevenSixEngine;
+type AnyEngine =
+  HeartsEngine | SpadesEngine | FortyFivesEngine | RummyEngine | SevenSixEngine;
+
+export const TRICK_REVIEW_MS = 3500;
+export const ROUND_REVIEW_MS = 5000;
 
 export interface GameRoom {
+  autoDeal?: boolean;
+  trickReview?: TrickReview;
   engine: AnyEngine;
   gameType: GameType;
   aiPlayers: Map<number, AIPlayer>;
   playerSockets: Map<number, string>;
   socketSeats: Map<string, number>;
+  participants: Map<number, string>;
 }
 
 export class GameService {
@@ -36,8 +55,12 @@ export class GameService {
   private loads = new Map<string, Promise<GameRoom | undefined>>();
 
   constructor(
-    private store: Pick<GameStateStore, 'save' | 'load' | 'remove'> = new GameStateStore(),
-    private delay: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    private store: Pick<
+      GameStateStore,
+      "save" | "load" | "remove"
+    > = new GameStateStore(),
+    private delay: (ms: number) => Promise<void> = (ms) =>
+      new Promise((resolve) => setTimeout(resolve, ms)),
   ) {}
 
   // ── Persistence helpers ──
@@ -51,21 +74,27 @@ export class GameService {
       gameId,
       gameType: room.gameType,
       engineData: room.engine.serialize(),
+      trickReview: room.trickReview,
+      autoDeal: room.autoDeal ?? false,
       aiSeats: Array.from(room.aiPlayers.entries()).map(([seat, ai]) => ({
         seat,
         difficulty: ai.difficulty,
         displayName: ai.displayName,
       })),
-      playerMappings: Array.from(room.playerSockets.entries()).map(([seat, socketId]) => {
-        const state = room.engine.getState();
-        const player = state.players[seat];
-        return {
-          seat,
-          socketId,
-          userId: player?.userId ?? null,
-          displayName: player?.displayName ?? 'Player',
-        };
-      }),
+      participants: [...room.participants],
+      playerMappings: Array.from(room.playerSockets.entries()).map(
+        ([seat, socketId]) => {
+          const state = room.engine.getState();
+          const player = state.players[seat];
+          return {
+            seat,
+            socketId,
+            userId: player?.userId ?? null,
+            displayName: player?.displayName ?? "Player",
+            participantId: room.participants.get(seat),
+          };
+        },
+      ),
     };
 
     await this.store.save(gameId, data);
@@ -80,7 +109,9 @@ export class GameService {
     // Reconnecting clients must share one restored engine instance.
     const existingLoad = this.loads.get(gameId);
     if (existingLoad) return existingLoad;
-    const pending = this.store.load(gameId).then((data) => data ? this.restoreFromData(data) : undefined);
+    const pending = this.store
+      .load(gameId)
+      .then((data) => (data ? this.restoreFromData(data) : undefined));
     this.loads.set(gameId, pending);
     try {
       return await pending;
@@ -99,9 +130,14 @@ export class GameService {
       case GameType.Spades:
         engine = new SpadesEngine(data.gameId);
         break;
-      case GameType.Euchre:
-        engine = new EuchreEngine(data.gameId);
+      case GameType.FortyFives: {
+        // The table size is part of the saved state, and the constructor
+        // validates it, so it has to be read back before restoring.
+        const saved = (data.engineData as { state?: { config?: GameConfig } })
+          .state?.config;
+        engine = new FortyFivesEngine(data.gameId, saved);
         break;
+      }
       case GameType.Rummy:
         engine = new RummyEngine(data.gameId);
         break;
@@ -112,6 +148,9 @@ export class GameService {
         throw new Error(`Unknown game type: ${data.gameType}`);
     }
     engine.restore(data.engineData);
+    engine.setRoundPause(
+      engine instanceof SevenSixEngine || engine instanceof FortyFivesEngine,
+    );
 
     const aiPlayers = new Map<number, AIPlayer>();
     for (const ai of data.aiSeats) {
@@ -121,6 +160,7 @@ export class GameService {
     const playerSockets = new Map<number, string>();
     const socketSeats = new Map<string, number>();
     for (const mapping of data.playerMappings) {
+      engine.getState().players[mapping.seat].isConnected = false;
       playerSockets.set(mapping.seat, mapping.socketId);
       socketSeats.set(mapping.socketId, mapping.seat);
     }
@@ -128,9 +168,18 @@ export class GameService {
     const room: GameRoom = {
       engine,
       gameType: data.gameType,
+      trickReview: data.trickReview,
+      autoDeal: data.autoDeal ?? false,
       aiPlayers,
       playerSockets,
       socketSeats,
+      participants: new Map(
+        data.participants ??
+          data.playerMappings.map((mapping) => [
+            mapping.seat,
+            mapping.participantId ?? `legacy:${mapping.socketId}`,
+          ]),
+      ),
     };
 
     this.games.set(data.gameId, room);
@@ -154,8 +203,8 @@ export class GameService {
       case GameType.Spades:
         engine = new SpadesEngine(gameId, config);
         break;
-      case GameType.Euchre:
-        engine = new EuchreEngine(gameId, config);
+      case GameType.FortyFives:
+        engine = new FortyFivesEngine(gameId, config);
         break;
       case GameType.Rummy:
         engine = new RummyEngine(gameId, config);
@@ -167,12 +216,17 @@ export class GameService {
         throw new Error(`Unknown game type: ${gameType}`);
     }
 
+    engine.setRoundPause(
+      engine instanceof SevenSixEngine || engine instanceof FortyFivesEngine,
+    );
     const room: GameRoom = {
       engine,
       gameType,
+      autoDeal: false,
       aiPlayers: new Map(),
       playerSockets: new Map(),
       socketSeats: new Map(),
+      participants: new Map(),
     };
 
     this.games.set(gameId, room);
@@ -193,19 +247,23 @@ export class GameService {
     socketId: string,
     displayName: string,
     userId?: string,
+    participantId = userId ?? socketId,
   ): Promise<number> {
     const room = await this.ensureLoaded(gameId);
-    if (!room) throw new Error('Game not found');
+    if (!room) throw new Error("Game not found");
 
     // Check if this socket is already in the game
     const existingSeat = room.socketSeats.get(socketId);
-    if (existingSeat !== undefined) return existingSeat;
+    if (existingSeat !== undefined) {
+      room.engine.getState().players[existingSeat].isConnected = true;
+      return existingSeat;
+    }
 
     // Check if this user is already in the game (reconnecting with new socket)
-    if (userId) {
+    if (participantId) {
       for (const [seat] of room.playerSockets) {
         const state = room.engine.getState();
-        if (state.players[seat].userId === userId) {
+        if (room.participants.get(seat) === participantId) {
           const oldSid = room.playerSockets.get(seat);
           if (oldSid) room.socketSeats.delete(oldSid);
           room.playerSockets.set(seat, socketId);
@@ -218,7 +276,9 @@ export class GameService {
     }
 
     if (room.engine.getState().phase !== GamePhase.Waiting) {
-      throw new Error('This game has already started; only existing players can rejoin');
+      throw new Error(
+        "This game has already started; only existing players can rejoin",
+      );
     }
 
     // Find first seat not occupied by a human or bot.
@@ -230,11 +290,12 @@ export class GameService {
         break;
       }
     }
-    if (seat === -1) throw new Error('Game is full');
+    if (seat === -1) throw new Error("Game is full");
 
     room.engine.setPlayer(seat, userId ?? null, displayName, false);
     room.playerSockets.set(seat, socketId);
     room.socketSeats.set(socketId, seat);
+    room.participants.set(seat, participantId);
 
     await this.persist(gameId);
     return seat;
@@ -242,9 +303,16 @@ export class GameService {
 
   async fillWithAI(gameId: string, difficulty: AIDifficulty): Promise<void> {
     const room = await this.ensureLoaded(gameId);
-    if (!room) throw new Error('Game not found');
+    if (!room) throw new Error("Game not found");
 
-    const botNames = ['Dealer Danny', 'Lucky Lucy', 'Card Shark Sally', 'Steady Steve', 'Professor Pip', 'The Oracle'];
+    const botNames = [
+      "Dealer Danny",
+      "Lucky Lucy",
+      "Card Shark Sally",
+      "Steady Steve",
+      "Professor Pip",
+      "The Oracle",
+    ];
     let botIdx = 0;
     const maxSeats = room.engine.getState().config.maxPlayers;
 
@@ -262,96 +330,246 @@ export class GameService {
 
   async startGame(gameId: string): Promise<void> {
     const room = await this.ensureLoaded(gameId);
-    if (!room) throw new Error('Game not found');
+    if (!room) throw new Error("Game not found");
     room.engine.startGame();
     await this.persist(gameId);
   }
 
-  async playCard(gameId: string, seatIndex: number, card: Card): Promise<void> {
+  private assertNotReviewing(room: GameRoom): void {
+    if (room.trickReview && room.trickReview.until > Date.now())
+      throw new Error(
+        "Please wait for the completed trick to finish displaying.",
+      );
+  }
+
+  async dealNextRound(gameId: string, roundNumber: number): Promise<void> {
     const room = await this.ensureLoaded(gameId);
-    if (!room) throw new Error('Game not found');
-    room.engine.playCard(seatIndex, card);
+    if (!room) throw new Error("Game not found");
+    this.assertNotReviewing(room);
+    if (!(room.engine instanceof SevenSixEngine || room.engine instanceof FortyFivesEngine))
+      throw new Error("This game does not support manual dealing");
+    if (!Number.isInteger(roundNumber) || room.engine.getState().roundNumber !== roundNumber)
+      throw new Error("This hand has already advanced. Wait for the table to update.");
+    room.engine.startNextRound();
     await this.persist(gameId);
   }
 
-  async passCards(gameId: string, seatIndex: number, cards: Card[]): Promise<void> {
+  async setAutoDeal(gameId: string, enabled: boolean): Promise<void> {
     const room = await this.ensureLoaded(gameId);
-    if (!room) throw new Error('Game not found');
-    if (!(room.engine instanceof HeartsEngine)) throw new Error('Not a Hearts game');
+    if (!room) throw new Error("Game not found");
+    if (typeof enabled !== "boolean") throw new Error("Choose on or off for automatic dealing");
+    if (!(room.engine instanceof SevenSixEngine || room.engine instanceof FortyFivesEngine))
+      throw new Error("This game does not support automatic dealing");
+    room.autoDeal = enabled;
+    await this.persist(gameId);
+  }
+
+  async playCard(
+    gameId: string,
+    seatIndex: number,
+    card: Card,
+  ): Promise<CompletedTrick | undefined> {
+    const room = await this.ensureLoaded(gameId);
+    if (!room) throw new Error("Game not found");
+    this.assertNotReviewing(room);
+    // Engines resolve synchronously. Preserve the final public table before
+    // scoring/advancement, including the last card and round's trick totals.
+    const views = room.engine
+      .getState()
+      .players.map((_, seat) =>
+        structuredClone(room.engine.getVisibleState(seat)),
+      );
+    const eventCount = room.engine.getEvents().length;
+    room.engine.playCard(seatIndex, card);
+    const event = room.engine
+      .getEvents()
+      .slice(eventCount)
+      .find((event) => event.type === GameEventType.TrickCompleted);
+    let trick: CompletedTrick | undefined;
+    if (event) {
+      trick = {
+        sequence: event.sequenceNum,
+        roundNumber: views[0].roundNumber,
+        trickNumber: views[0].trickNumber,
+        winningSeat: event.seatIndex!,
+        cards: structuredClone(event.payload.cards) as CompletedTrick["cards"],
+        points: event.payload.points as number,
+      };
+      for (const view of views) {
+        view.phase = GamePhase.TrickResolution;
+        view.currentTrick = trick.cards;
+        view.currentPlayerSeat = trick.winningSeat;
+        view.legalMoves = [];
+        view.lastTrick = trick;
+        view.players[seatIndex].cardCount--;
+        view.players[trick.winningSeat].tricksWon++;
+        if (view.mySeat === seatIndex)
+          view.myHand = view.myHand.filter(
+            (c) => c.rank !== card.rank || c.suit !== card.suit,
+          );
+      }
+      room.trickReview = { until: Date.now() + TRICK_REVIEW_MS, trick, views };
+    }
+    await this.persist(gameId);
+    return trick;
+  }
+
+  /** The same hold applies to human/bot last cards, new rounds, and game over. */
+  async waitForTrickReview(gameId: string): Promise<boolean> {
+    const room = await this.ensureLoaded(gameId);
+    const review = room?.trickReview;
+    if (!room || !review || review.until <= Date.now()) return false;
+    await this.delay(Math.max(0, review.until - Date.now()));
+    if (this.games.get(gameId) !== room || room.trickReview !== review)
+      return false;
+    review.until = 0;
+    await this.persist(gameId);
+    return true;
+  }
+
+  async passCards(
+    gameId: string,
+    seatIndex: number,
+    cards: Card[],
+  ): Promise<void> {
+    const room = await this.ensureLoaded(gameId);
+    if (!room) throw new Error("Game not found");
+    if (!(room.engine instanceof HeartsEngine))
+      throw new Error("Not a Hearts game");
     room.engine.passCards(seatIndex, cards);
     await this.persist(gameId);
   }
 
-  async placeBid(gameId: string, seatIndex: number, bid: number): Promise<void> {
+  async placeBid(
+    gameId: string,
+    seatIndex: number,
+    bid: number,
+  ): Promise<void> {
     const room = await this.ensureLoaded(gameId);
-    if (!room) throw new Error('Game not found');
-    if (!(room.engine instanceof SpadesEngine)) throw new Error('Not a Spades game');
+    if (!room) throw new Error("Game not found");
+    if (!(room.engine instanceof SpadesEngine))
+      throw new Error("Not a Spades game");
+    this.assertNotReviewing(room);
     room.engine.placeBid(seatIndex, bid);
     await this.persist(gameId);
   }
 
-  async rummyDraw(gameId: string, seatIndex: number, source: 'stock' | 'discard'): Promise<void> {
+  async rummyDraw(
+    gameId: string,
+    seatIndex: number,
+    source: "stock" | "discard",
+  ): Promise<void> {
     const room = await this.ensureLoaded(gameId);
-    if (!room) throw new Error('Game not found');
-    if (!(room.engine instanceof RummyEngine)) throw new Error('Not a Rummy game');
+    if (!room) throw new Error("Game not found");
+    if (!(room.engine instanceof RummyEngine))
+      throw new Error("Not a Rummy game");
     room.engine.drawCard(seatIndex, source);
     await this.persist(gameId);
   }
 
-  async rummyLayMeld(gameId: string, seatIndex: number, cards: Card[]): Promise<void> {
+  async rummyLayMeld(
+    gameId: string,
+    seatIndex: number,
+    cards: Card[],
+  ): Promise<void> {
     const room = await this.ensureLoaded(gameId);
-    if (!room) throw new Error('Game not found');
-    if (!(room.engine instanceof RummyEngine)) throw new Error('Not a Rummy game');
+    if (!room) throw new Error("Game not found");
+    if (!(room.engine instanceof RummyEngine))
+      throw new Error("Not a Rummy game");
     room.engine.layMeld(seatIndex, cards);
     await this.persist(gameId);
   }
 
-  async rummyDiscard(gameId: string, seatIndex: number, card: Card): Promise<void> {
+  async rummyDiscard(
+    gameId: string,
+    seatIndex: number,
+    card: Card,
+  ): Promise<void> {
     const room = await this.ensureLoaded(gameId);
-    if (!room) throw new Error('Game not found');
-    if (!(room.engine instanceof RummyEngine)) throw new Error('Not a Rummy game');
+    if (!room) throw new Error("Game not found");
+    if (!(room.engine instanceof RummyEngine))
+      throw new Error("Not a Rummy game");
     room.engine.discardCard(seatIndex, card);
     await this.persist(gameId);
   }
 
-  async sevenSixPlaceBid(gameId: string, seatIndex: number, bid: number): Promise<void> {
+  /** A numeric bid in either family game: tricks in Seven-Six, points in 45s. */
+  async placeFamilyBid(
+    gameId: string,
+    seatIndex: number,
+    bid: number,
+  ): Promise<void> {
     const room = await this.ensureLoaded(gameId);
-    if (!room) throw new Error('Game not found');
-    if (!(room.engine instanceof SevenSixEngine)) throw new Error('Not a Seven-Six game');
+    if (!room) throw new Error("Game not found");
+    if (
+      !(
+        room.engine instanceof SevenSixEngine ||
+        room.engine instanceof FortyFivesEngine
+      )
+    )
+      throw new Error("This game does not take a numeric bid");
+    this.assertNotReviewing(room);
     room.engine.placeBid(seatIndex, bid);
     await this.persist(gameId);
   }
 
-  async callTrump(gameId: string, seatIndex: number, suit: Suit | 'pass'): Promise<void> {
+  async callTrump(
+    gameId: string,
+    seatIndex: number,
+    suit: Suit | "pass",
+  ): Promise<void> {
     const room = await this.ensureLoaded(gameId);
-    if (!room) throw new Error('Game not found');
-    if (!(room.engine instanceof EuchreEngine)) throw new Error('Not a Euchre game');
+    if (!room) throw new Error("Game not found");
+    if (!(room.engine instanceof FortyFivesEngine))
+      throw new Error("This game does not name a trump suit");
+    this.assertNotReviewing(room);
     room.engine.callTrump(seatIndex, suit);
     await this.persist(gameId);
   }
 
-  async getVisibleState(gameId: string, seatIndex: number): Promise<VisibleGameState> {
+  async getVisibleState(
+    gameId: string,
+    seatIndex: number,
+  ): Promise<VisibleGameState> {
     const room = await this.ensureLoaded(gameId);
-    if (!room) throw new Error('Game not found');
-    return room.engine.getVisibleState(seatIndex);
+    if (!room) throw new Error("Game not found");
+    const live = room.engine.getVisibleState(seatIndex);
+    const review = room.trickReview;
+    if (review && review.until > Date.now()) {
+      const view = structuredClone(review.views[seatIndex]);
+      view.players.forEach((player, seat) => {
+        player.isConnected = live.players[seat].isConnected;
+        player.isAI = live.players[seat].isAI;
+        player.displayName = live.players[seat].displayName;
+      });
+      return { ...view, autoDeal: room.autoDeal ?? false };
+    }
+    return { ...live, lastTrick: review?.trick, autoDeal: room.autoDeal ?? false };
   }
 
   async getPhase(gameId: string): Promise<GamePhase> {
     const room = await this.ensureLoaded(gameId);
-    if (!room) throw new Error('Game not found');
+    if (!room) throw new Error("Game not found");
     return room.engine.getState().phase;
   }
 
   async getCurrentSeat(gameId: string): Promise<number> {
     const room = await this.ensureLoaded(gameId);
-    if (!room) throw new Error('Game not found');
+    if (!room) throw new Error("Game not found");
     return room.engine.getState().currentPlayerSeat;
   }
 
-  async getSeatForSocket(gameId: string, socketId: string): Promise<number | undefined> {
+  async getSeatForSocket(
+    gameId: string,
+    socketId: string,
+  ): Promise<number | undefined> {
     const room = await this.ensureLoaded(gameId);
     if (!room) return undefined;
-    return room.socketSeats.get(socketId);
+    const seat = room.socketSeats.get(socketId);
+    return seat !== undefined &&
+      room.engine.getState().players[seat].isConnected
+      ? seat
+      : undefined;
   }
 
   handlePlayerDisconnect(gameId: string, socketId: string): number {
@@ -369,10 +587,14 @@ export class GameService {
     if (!room) return;
 
     const player = room.engine.getState().players[seatIndex];
-    if (!Number.isInteger(seatIndex) || !player) throw new Error('Invalid seat');
+    if (!Number.isInteger(seatIndex) || !player)
+      throw new Error("Invalid seat");
     if (player.isAI) return;
-    if (player.isConnected) throw new Error('Player is still connected');
-    const ai = createAIPlayer(AIDifficulty.Intermediate, player.displayName + ' (AI)');
+    if (player.isConnected) throw new Error("Player is still connected");
+    const ai = createAIPlayer(
+      AIDifficulty.Intermediate,
+      player.displayName + " (AI)",
+    );
     room.aiPlayers.set(seatIndex, ai);
     room.engine.setPlayer(seatIndex, null, ai.displayName, true);
 
@@ -394,41 +616,82 @@ export class GameService {
   getConnectedHumanCount(gameId: string): number {
     const room = this.games.get(gameId);
     if (!room) return 0;
-    return [...room.playerSockets.keys()].filter((seat) => room.engine.getState().players[seat].isConnected).length;
+    return [...room.playerSockets.keys()].filter(
+      (seat) => room.engine.getState().players[seat].isConnected,
+    ).length;
   }
 
   /** One scheduler per game, continuing across bidding and round boundaries. */
   executeAITurns(
     gameId: string,
-    onCardPlayed?: (seatIndex: number, card: Card) => void,
+    onCardPlayed?: (seatIndex: number, card: Card) => void | Promise<void>,
+    onStateChanged?: () => void | Promise<void>,
   ): Promise<void> {
     const running = this.aiRuns.get(gameId);
     if (running) return running;
-    const pending = this.runAIUntilHumanTurn(gameId, onCardPlayed).finally(() => this.aiRuns.delete(gameId));
+    const pending = this.runAIUntilHumanTurn(
+      gameId,
+      onCardPlayed,
+      onStateChanged,
+    ).finally(() => this.aiRuns.delete(gameId));
     this.aiRuns.set(gameId, pending);
     return pending;
   }
 
-  private async runAIUntilHumanTurn(gameId: string, onCardPlayed?: (seatIndex: number, card: Card) => void): Promise<void> {
+  private async runAIUntilHumanTurn(
+    gameId: string,
+    onCardPlayed?: (seatIndex: number, card: Card) => void | Promise<void>,
+    onStateChanged?: () => void | Promise<void>,
+  ): Promise<void> {
     const room = await this.ensureLoaded(gameId);
     if (!room) return;
     while (this.games.get(gameId) === room) {
+      if (await this.waitForTrickReview(gameId)) await onStateChanged?.();
+      if (this.games.get(gameId) !== room) return;
+      if (room.engine.getState().phase === GamePhase.RoundScoring) {
+        const allBots = room.engine.getState().players.every((p) => p.isAI);
+        if (!room.autoDeal && !allBots) return;
+        const round = room.engine.getState().roundNumber;
+        // Leave a readable score summary, and recheck the preference after waiting.
+        await this.delay(ROUND_REVIEW_MS);
+        if (this.games.get(gameId) !== room) return;
+        if (room.engine.getState().phase !== GamePhase.RoundScoring ||
+            room.engine.getState().roundNumber !== round) continue;
+        if (!room.autoDeal && !room.engine.getState().players.every((p) => p.isAI)) return;
+        room.engine.startNextRound();
+        await this.persist(gameId);
+        await onStateChanged?.();
+      }
       const eventCount = room.engine.getEvents().length;
-      await this.executeAIPhase(gameId, onCardPlayed);
-      if (room.engine.getEvents().length === eventCount || room.engine.getState().phase === GamePhase.GameOver) return;
+      await this.executeAIPhase(gameId, onCardPlayed, onStateChanged);
+      if (
+        room.engine.getEvents().length === eventCount ||
+        room.engine.getState().phase === GamePhase.GameOver
+      )
+        return;
     }
   }
 
-  private async pauseForAI(gameId: string, room: GameRoom, seat: number, ms: number): Promise<boolean> {
+  private async pauseForAI(
+    gameId: string,
+    room: GameRoom,
+    seat: number,
+    ms: number,
+  ): Promise<boolean> {
     const ai = room.aiPlayers.get(seat);
     const eventCount = room.engine.getEvents().length;
     await this.delay(ms);
-    return this.games.get(gameId) === room && room.aiPlayers.get(seat) === ai && room.engine.getEvents().length === eventCount;
+    return (
+      this.games.get(gameId) === room &&
+      room.aiPlayers.get(seat) === ai &&
+      room.engine.getEvents().length === eventCount
+    );
   }
 
   private async executeAIPhase(
     gameId: string,
-    onCardPlayed?: (seatIndex: number, card: Card) => void,
+    onCardPlayed?: (seatIndex: number, card: Card) => void | Promise<void>,
+    onStateChanged?: () => void | Promise<void>,
   ): Promise<void> {
     const room = await this.ensureLoaded(gameId);
     if (!room) return;
@@ -436,12 +699,15 @@ export class GameService {
     const state = room.engine.getState();
 
     // ── Hearts: AI passing ──
-    if (state.phase === GamePhase.Passing && room.engine instanceof HeartsEngine) {
+    if (
+      state.phase === GamePhase.Passing &&
+      room.engine instanceof HeartsEngine
+    ) {
       for (const [seat, ai] of room.aiPlayers) {
         if (!room.engine.hasPlayerPassed(seat)) {
           const visibleState = room.engine.getVisibleState(seat);
           const cards = ai.choosePassCards(visibleState, 3);
-          if (!await this.pauseForAI(gameId, room, seat, 300)) return;
+          if (!(await this.pauseForAI(gameId, room, seat, 300))) return;
           room.engine.passCards(seat, cards);
         }
       }
@@ -450,15 +716,20 @@ export class GameService {
     }
 
     // ── Spades: AI bidding ──
-    if (state.phase === GamePhase.Bidding && room.engine instanceof SpadesEngine) {
+    if (
+      state.phase === GamePhase.Bidding &&
+      room.engine instanceof SpadesEngine
+    ) {
       let currentSeat = state.currentPlayerSeat;
       let ai = room.aiPlayers.get(currentSeat);
 
       while (ai && room.engine.getState().phase === GamePhase.Bidding) {
         const visibleState = room.engine.getVisibleState(currentSeat);
         const bid = ai.chooseBid(visibleState);
-        if (!await this.pauseForAI(gameId, room, currentSeat, 500)) return;
-        room.engine.placeBid(currentSeat, typeof bid === 'number' ? bid : 2);
+        if (!(await this.pauseForAI(gameId, room, currentSeat, 500))) return;
+        room.engine.placeBid(currentSeat, typeof bid === "number" ? bid : 2);
+        await this.persist(gameId);
+        await onStateChanged?.();
 
         const newState = room.engine.getState();
         if (newState.phase !== GamePhase.Bidding) break;
@@ -470,7 +741,10 @@ export class GameService {
     }
 
     // ── Seven-Six: AI bidding ──
-    if (state.phase === GamePhase.Bidding && room.engine instanceof SevenSixEngine) {
+    if (
+      state.phase === GamePhase.Bidding &&
+      room.engine instanceof SevenSixEngine
+    ) {
       let currentSeat = state.currentPlayerSeat;
       let ai = room.aiPlayers.get(currentSeat);
 
@@ -480,8 +754,10 @@ export class GameService {
         const trumpSuit = ssEngine.getState().trumpSuit!;
         const legalBids = ssEngine.getLegalBids(currentSeat);
         const bid = sevenSixBid(hand, trumpSuit, legalBids);
-        if (!await this.pauseForAI(gameId, room, currentSeat, 500)) return;
+        if (!(await this.pauseForAI(gameId, room, currentSeat, 500))) return;
         ssEngine.placeBid(currentSeat, bid);
+        await this.persist(gameId);
+        await onStateChanged?.();
 
         const newState = ssEngine.getState();
         if (newState.phase !== GamePhase.Bidding) break;
@@ -492,28 +768,29 @@ export class GameService {
       return;
     }
 
-    // ── Euchre: AI trump calling ──
-    if (state.phase === GamePhase.Bidding && room.engine instanceof EuchreEngine) {
+    // ── Forty-Fives: AI bidding, then naming trump ──
+    if (
+      state.phase === GamePhase.Bidding &&
+      room.engine instanceof FortyFivesEngine
+    ) {
+      const engine = room.engine;
       let currentSeat = state.currentPlayerSeat;
       let ai = room.aiPlayers.get(currentSeat);
 
-      while (ai && room.engine.getState().phase === GamePhase.Bidding) {
-        const hand = room.engine.getState().players[currentSeat].hand;
-        const turnedUp = room.engine.getTurnedUpCard();
-        const legalCalls = room.engine.getLegalTrumpCalls(currentSeat);
-        if (!turnedUp || legalCalls.length === 0) return;
-        let call: Suit | 'pass' = 'pass';
-        if (legalCalls.includes(turnedUp.suit)) {
-          if (shouldCallTrump(hand, turnedUp.suit)) call = turnedUp.suit;
+      while (ai && engine.getState().phase === GamePhase.Bidding) {
+        const visible = engine.getVisibleState(currentSeat);
+        if (!(await this.pauseForAI(gameId, room, currentSeat, 500))) return;
+        if (engine.getLegalTrumpCalls(currentSeat).length) {
+          // This seat won the auction and now names trump.
+          engine.callTrump(currentSeat, fortyFivesTrump(visible));
         } else {
-          call = chooseTrumpSuit(hand, turnedUp.suit) ?? 'pass';
+          const bid = fortyFivesBid(visible);
+          engine.placeBid(currentSeat, typeof bid === "number" ? bid : -1);
         }
-        // A stuck dealer must choose one of the three remaining suits.
-        if (!legalCalls.includes(call)) call = legalCalls[0];
-        if (!await this.pauseForAI(gameId, room, currentSeat, 500)) return;
-        room.engine.callTrump(currentSeat, call);
+        await this.persist(gameId);
+        await onStateChanged?.();
 
-        const newState = room.engine.getState();
+        const newState = engine.getState();
         if (newState.phase !== GamePhase.Bidding) break;
         currentSeat = newState.currentPlayerSeat;
         ai = room.aiPlayers.get(currentSeat);
@@ -523,7 +800,10 @@ export class GameService {
     }
 
     // ── Rummy: AI draw/meld/discard ──
-    if (state.phase === GamePhase.Playing && room.engine instanceof RummyEngine) {
+    if (
+      state.phase === GamePhase.Playing &&
+      room.engine instanceof RummyEngine
+    ) {
       let currentSeat = state.currentPlayerSeat;
       let ai = room.aiPlayers.get(currentSeat);
 
@@ -532,7 +812,7 @@ export class GameService {
         const visibleState = rummyEngine.getVisibleState(currentSeat);
 
         // Draw
-        if (rummyEngine.getRummyPhase() === 'draw') {
+        if (rummyEngine.getRummyPhase() === "draw") {
           const source = chooseDrawSource(visibleState);
           await this.delay(800);
           rummyEngine.drawCard(currentSeat, source);
@@ -585,11 +865,19 @@ export class GameService {
       const visibleState = room.engine.getVisibleState(currentSeat);
       const card = ai.chooseCard(visibleState);
 
-      if (!await this.pauseForAI(gameId, room, currentSeat, 1500 + Math.random() * 1000)) return;
-      room.engine.playCard(currentSeat, card);
-      await this.persist(gameId);
-
-      if (onCardPlayed) onCardPlayed(currentSeat, card);
+      if (
+        !(await this.pauseForAI(
+          gameId,
+          room,
+          currentSeat,
+          1500 + Math.random() * 1000,
+        ))
+      )
+        return;
+      await this.playCard(gameId, currentSeat, card);
+      await onCardPlayed?.(currentSeat, card);
+      if (await this.waitForTrickReview(gameId)) await onStateChanged?.();
+      if (this.games.get(gameId) !== room) return;
 
       const newState = room.engine.getState();
       if (newState.phase !== GamePhase.Playing) break;

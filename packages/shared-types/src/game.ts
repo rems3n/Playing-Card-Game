@@ -1,10 +1,10 @@
 // ── Card primitives ──
 
 export enum Suit {
-  Clubs = 'C',
-  Diamonds = 'D',
-  Hearts = 'H',
-  Spades = 'S',
+  Clubs = "C",
+  Diamonds = "D",
+  Hearts = "H",
+  Spades = "S",
 }
 
 export enum Rank {
@@ -31,29 +31,29 @@ export interface Card {
 // ── Game types ──
 
 export enum GameType {
-  Hearts = 'hearts',
-  Spades = 'spades',
-  Euchre = 'euchre',
-  Rummy = 'rummy',
-  SevenSix = 'seven-six',
+  Hearts = "hearts",
+  Spades = "spades",
+  FortyFives = "forty-fives",
+  Rummy = "rummy",
+  SevenSix = "seven-six",
 }
 
 export enum GamePhase {
-  Waiting = 'waiting',
-  Dealing = 'dealing',
-  Passing = 'passing',
-  Bidding = 'bidding',
-  Playing = 'playing',
-  TrickResolution = 'trick_resolution',
-  RoundScoring = 'round_scoring',
-  GameOver = 'game_over',
+  Waiting = "waiting",
+  Dealing = "dealing",
+  Passing = "passing",
+  Bidding = "bidding",
+  Playing = "playing",
+  TrickResolution = "trick_resolution",
+  RoundScoring = "round_scoring",
+  GameOver = "game_over",
 }
 
 export enum GameStatus {
-  Waiting = 'waiting',
-  Active = 'active',
-  Completed = 'completed',
-  Abandoned = 'abandoned',
+  Waiting = "waiting",
+  Active = "active",
+  Completed = "completed",
+  Abandoned = "abandoned",
 }
 
 // ── Player ──
@@ -71,10 +71,10 @@ export interface PlayerState {
 }
 
 export enum AIDifficulty {
-  Beginner = 'beginner',
-  Intermediate = 'intermediate',
-  Advanced = 'advanced',
-  Expert = 'expert',
+  Beginner = "beginner",
+  Intermediate = "intermediate",
+  Advanced = "advanced",
+  Expert = "expert",
 }
 
 // ── Trick ──
@@ -88,6 +88,13 @@ export interface TrickResult {
   winningSeat: number;
   cards: PlayedCard[];
   points: number;
+}
+
+/** Completed public trick, retained for review even after the next deal. */
+export interface CompletedTrick extends TrickResult {
+  sequence: number;
+  roundNumber: number;
+  trickNumber: number;
 }
 
 // ── Game state ──
@@ -120,7 +127,7 @@ export interface GameState {
   drawPile?: Card[];
   discardPile?: Card[];
   melds?: Card[][][]; // [seat][meldIndex][cards]
-  rummyPhase?: 'draw' | 'discard';
+  rummyPhase?: "draw" | "discard";
   // Seven-Six-specific
   trumpCard?: Card; // face-up card that determines trump
   dealerSeat?: number; // who is dealing this round
@@ -149,15 +156,20 @@ export interface VisibleGameState {
   myHand: Card[];
   mySeat: number;
   legalMoves: Card[];
-  // Euchre bidding options are supplied by the authoritative engine.
-  turnedUpCard?: Card;
-  trumpCallRound?: number;
-  legalTrumpCalls?: Array<Suit | 'pass'>;
+  lastTrick?: CompletedTrick;
+  /** Shared table preference, persisted for this game only. */
+  autoDeal?: boolean;
+  // Bidding options are supplied by the authoritative engine.
+  legalTrumpCalls?: Array<Suit | "pass">;
+  // Forty-Fives: the auction, and who won it.
+  legalBids?: number[];
+  declarerSeat?: number;
+  contract?: number;
   // Rummy-specific (visible to all)
   drawPileCount?: number;
   discardTop?: Card | null;
   melds?: Card[][][]; // all players' melds
-  rummyPhase?: 'draw' | 'discard';
+  rummyPhase?: "draw" | "discard";
   // Seven-Six-specific (visible to all)
   trumpCard?: Card;
   dealerSeat?: number;
@@ -178,25 +190,25 @@ export interface VisiblePlayerState {
 // ── Hearts-specific ──
 
 export enum PassDirection {
-  Left = 'left',
-  Right = 'right',
-  Across = 'across',
-  Keep = 'keep',
+  Left = "left",
+  Right = "right",
+  Across = "across",
+  Keep = "keep",
 }
 
 // ── Game events (for event sourcing) ──
 
 export enum GameEventType {
-  GameCreated = 'game_created',
-  PlayerJoined = 'player_joined',
-  DealStarted = 'deal_started',
-  CardsDealt = 'cards_dealt',
-  PassCards = 'pass_cards',
-  BidPlaced = 'bid_placed',
-  CardPlayed = 'card_played',
-  TrickCompleted = 'trick_completed',
-  RoundEnded = 'round_ended',
-  GameEnded = 'game_ended',
+  GameCreated = "game_created",
+  PlayerJoined = "player_joined",
+  DealStarted = "deal_started",
+  CardsDealt = "cards_dealt",
+  PassCards = "pass_cards",
+  BidPlaced = "bid_placed",
+  CardPlayed = "card_played",
+  TrickCompleted = "trick_completed",
+  RoundEnded = "round_ended",
+  GameEnded = "game_ended",
 }
 
 export interface GameEvent {

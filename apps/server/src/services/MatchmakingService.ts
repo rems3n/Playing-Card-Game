@@ -41,7 +41,7 @@ export class MatchmakingService {
 
   /** Remove a player from all queues (on disconnect). */
   async leaveAllQueues(socketId: string): Promise<void> {
-    for (const gameType of ['hearts', 'spades', 'euchre']) {
+    for (const gameType of ['hearts', 'spades', 'forty-fives']) {
       await this.leaveQueue(gameType, socketId);
     }
   }

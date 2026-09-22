@@ -2,7 +2,7 @@ import type { Card, VisibleGameState } from '@card-game/shared-types';
 import { AIDifficulty, Suit, Rank, GameType } from '@card-game/shared-types';
 import type { AIPlayer } from '../AIPlayer.js';
 import { spadesPlayCard, spadesBid } from '../games/SpadesAI.js';
-import { euchrePlayCard, shouldCallTrump, chooseTrumpSuit } from '../games/EuchreAI.js';
+import { fortyFivesBid, fortyFivesPlayCard, fortyFivesTrump } from '../games/FortyFivesAI.js';
 import { chooseDiscard as rummyChooseDiscard } from '../games/RummyAI.js';
 import { sevenSixPlayCard, sevenSixBid } from '../games/SevenSixAI.js';
 
@@ -23,8 +23,8 @@ export class HeuristicStrategy implements AIPlayer {
         return this.chooseHeartsCard(state, moves);
       case GameType.Spades:
         return spadesPlayCard(state, moves);
-      case GameType.Euchre:
-        return euchrePlayCard(state, moves);
+      case GameType.FortyFives:
+        return fortyFivesPlayCard(state);
       case GameType.Rummy:
         return rummyChooseDiscard(state);
       case GameType.SevenSix:
@@ -122,7 +122,7 @@ export class HeuristicStrategy implements AIPlayer {
       }
       return sevenSixBid(state.myHand, state.trumpSuit, legalBids);
     }
-    // Euchre bidding is handled via callTrump, not this method
+    if (state.gameType === GameType.FortyFives) return fortyFivesBid(state);
     return Math.max(1, Math.min(Math.floor(state.myHand.length / 3), 5));
   }
 }

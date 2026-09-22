@@ -1,201 +1,250 @@
-'use client';
+"use client";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
+import { useSocket } from "@/hooks/useSocket";
+import { connectPlayer, useConnection } from "@/components/ConnectionProvider";
+import type { WaitingRoomState } from "@card-game/shared-types";
+import { InvitePanel, useInviteConfig } from "@/components/lobby/InvitePanel";
 
-import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { useSession } from 'next-auth/react';
-import { useSocket } from '@/hooks/useSocket';
-import { useGameStore } from '@card-game/shared-store';
-import type { WaitingRoomState } from '@card-game/shared-types';
-
-export default function WaitingRoomPage() {
-  const params = useParams<{ id: string }>();
+export default function WaitingRoom() {
+  const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { status } = useSession();
   const socket = useSocket();
-  const { setGameId } = useGameStore();
+  const connection = useConnection();
+  const { data: session } = useSession();
+  const [name, setName] = useState("");
   const [room, setRoom] = useState<WaitingRoomState | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-
+  const [error, setError] = useState("");
+  const [starting, setStarting] = useState(false);
+  const invites = useInviteConfig();
   useEffect(() => {
-    if (!params.id || status === 'loading') return;
-
-    function onUpdate(state: WaitingRoomState) {
-      if (state.roomId !== params.id) return;
-      setRoom(state);
-      setError(null);
-    }
-
-    function onStarted({ gameId }: { gameId: string }) {
-      setGameId(gameId);
-      router.push(`/game/${gameId}`);
-    }
-
-    function onError({ message }: { message: string }) {
-      setError(message);
-    }
-
-    socket.on('room:update', onUpdate);
-    socket.on('room:started', onStarted);
-    socket.on('room:error', onError);
-
-    // Join the room
-    if (socket.connected) {
-      socket.emit('room:join', { roomId: params.id });
-    }
-    function onConnect() {
-      socket.emit('room:join', { roomId: params.id });
-    }
-    socket.on('connect', onConnect);
-
-    return () => {
-      socket.off('room:update', onUpdate);
-      socket.off('room:started', onStarted);
-      socket.off('room:error', onError);
-      socket.off('connect', onConnect);
+    const update = (state: WaitingRoomState) => {
+      if (state.roomId === id) {
+        setRoom(state);
+        setError("");
+      }
     };
-  }, [params.id, socket, status, setGameId, router]);
-
-  const handleStart = () => {
-    if (params.id) {
-      socket.emit('room:start', { roomId: params.id });
-    }
-  };
-
-  const handleLeave = () => {
-    if (params.id) {
-      socket.emit('room:leave', { roomId: params.id });
-      router.push('/');
-    }
-  };
-
-  const copyLink = () => {
-    const url = `${window.location.origin}/room/${params.id}`;
-    navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const isHost = room?.players.some((p) => p.isHost && p.seatIndex === room.mySeat);
-
-  if (status === 'loading' || !room) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <div className="w-8 h-8 border-2 border-[var(--accent-blue)] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <div className="text-[var(--text-muted)] text-sm">
-            {error ?? 'Joining room...'}
-          </div>
-          {error && <button className="mt-4 min-h-11 px-4 rounded border border-white/20" onClick={handleLeave}>Back to games</button>}
-        </div>
-      </div>
-    );
-  }
-
+    const started = ({ gameId }: { gameId: string }) =>
+      router.push(`/game/${gameId}`);
+    const failed = ({ message }: { message: string }) => {
+      setError(message);
+      setStarting(false);
+    };
+    const join = () => socket.emit("room:join", { roomId: id });
+    socket.on("room:update", update);
+    socket.on("room:started", started);
+    socket.on("room:error", failed);
+    socket.on("connect", join);
+    if (socket.connected) join();
+    return () => {
+      socket.off("room:update", update);
+      socket.off("room:started", started);
+      socket.off("room:error", failed);
+      socket.off("connect", join);
+      if (socket.connected) socket.emit("room:leave", { roomId: id });
+    };
+  }, [id, router, socket]);
+  useEffect(() => {
+    if (!starting) return;
+    const timer = setTimeout(() => {
+      setStarting(false);
+      setError("Starting took too long. Rejoin the room to check its status.");
+    }, 15000);
+    return () => clearTimeout(timer);
+  }, [starting]);
+  const me = room?.players.find((p) => p.seatIndex === room.mySeat);
+  const host = me?.isHost;
+  const notReady = room?.players.filter((p) => !p.ready) ?? [];
+  const gameName =
+    room?.gameType === "seven-six"
+      ? "Seven-Six"
+      : room?.gameType === "forty-fives"
+        ? "45s"
+        : "cards";
   return (
-    <div className="flex items-center justify-center h-full p-6">
-      <div className="bg-[var(--bg-secondary)] rounded-xl border border-[var(--border-subtle)] p-6 w-full max-w-md">
-        {/* Header */}
-        <div className="text-center mb-6">
-          <div className="text-2xl mb-1">
-            {room.gameType === 'hearts' ? '♥' : room.gameType === 'spades' ? '♠' : '🃏'}
-          </div>
-          <h1 className="text-xl font-bold capitalize">{room.gameType}</h1>
-          <p className="text-[var(--text-muted)] text-sm mt-1">Waiting for players...</p>
-        </div>
-
-        {/* Game settings (if custom) */}
-        {room.config?.targetScore && (
-          <div className="bg-[var(--bg-primary)] rounded-lg px-4 py-2.5 mb-4">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] text-[var(--text-muted)] uppercase tracking-wider">
-                {room.gameType === 'hearts' ? 'Points to Lose' : 'Points to Win'}
-              </span>
-              <span className="text-sm font-bold font-mono">{room.config.targetScore}</span>
-            </div>
-          </div>
-        )}
-
-        {/* Room code + copy link */}
-        <div className="flex items-center justify-between bg-[var(--bg-primary)] rounded-lg px-4 py-3 mb-4">
-          <div>
-            <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Room Code</div>
-            <div className="text-lg font-bold font-mono tracking-widest">{room.roomId}</div>
-          </div>
-          <button
-            onClick={copyLink}
-            className="px-3 py-1.5 text-[12px] font-medium bg-[var(--accent-blue)] text-white rounded hover:brightness-110 transition-all"
-          >
-            {copied ? 'Copied!' : 'Copy Link'}
+    <div className="waiting-page">
+      <Link className="text-link" href="/">
+        ← Games
+      </Link>
+      <div className="waiting-intro">
+        <p className="eyebrow">PRIVATE TABLE</p>
+        <h1>
+          {room?.gameType === "seven-six"
+            ? "Seven-Six"
+            : room?.gameType === "forty-fives"
+              ? "45s"
+              : "Your private table"}
+        </h1>
+        <p>Share the room code below. Seats are held for people who join.</p>
+      </div>
+      {!connection.connected && (
+        <p className="notice" role="status">
+          {connection.message || "Connecting…"}{" "}
+          <button onClick={connection.retry}>Retry</button>
+        </p>
+      )}
+      {error && (
+        <p className="notice error" role="alert">
+          {error}
+        </p>
+      )}
+      {!session?.user && (
+        <form
+          className="room-name-form"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            if (!name.trim()) return;
+            try {
+              await connectPlayer(name.trim());
+            } catch (error) {
+              setError(
+                error instanceof Error
+                  ? error.message
+                  : "Could not update name",
+              );
+            }
+          }}
+        >
+          <label>
+            Your name
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={
+                room?.players[room.mySeat ?? 0]?.displayName ??
+                "Enter your name"
+              }
+              maxLength={50}
+              autoComplete="nickname"
+            />
+          </label>
+          <button className="button secondary" disabled={!name.trim()}>
+            Update name
           </button>
-        </div>
-
-        {/* Players */}
-        <div className="mb-6">
-          <div className="text-[11px] text-[var(--text-muted)] uppercase tracking-wider mb-2">
-            Players ({room.players.length}/{room.maxPlayers})
+        </form>
+      )}
+      <div className="waiting-grid">
+        <section className="panel seats-panel">
+          <div className="section-heading">
+            <h2>At the table</h2>
+            <span className="small-note">
+              {room?.players.length ?? 0} / {room?.maxPlayers ?? "—"} players
+            </span>
           </div>
-          <div className="space-y-2">
-            {room.players.map((player, i) => (
-              <div
-                key={i}
-                className="flex items-center gap-3 bg-[var(--bg-primary)] rounded-lg px-3 py-2"
-              >
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 ${
-                  player.isHost ? 'bg-[var(--accent-gold)] text-[#1a1a1a]' : 'bg-[var(--accent-blue)]/50 text-white'
-                }`}>
-                  {player.displayName[0]?.toUpperCase() ?? '?'}
-                </div>
-                <div className="min-w-0">
-                  <div className="text-[13px] font-semibold truncate">
-                    {player.displayName}
-                    {player.isHost && (
-                      <span className="text-[var(--accent-gold)] text-[10px] font-normal ml-1.5">HOST</span>
-                    )}
+          {room ? (
+            Array.from({ length: room.maxPlayers }, (_, i) => {
+              const player = room.players[i];
+              return (
+                <div
+                  className={`waiting-seat ${player ? "" : "empty"}`}
+                  key={i}
+                >
+                  <span className="avatar">
+                    {player ? player.displayName[0] : "+"}
+                  </span>
+                  <div>
+                    <strong>
+                      {player
+                        ? `${player.displayName}${i === room.mySeat ? " (you)" : ""}`
+                        : "An open seat"}
+                    </strong>
+                    <small>
+                      {player
+                        ? `${player.isHost ? "Host · " : ""}${
+                            player.connected === false
+                              ? "Reconnecting"
+                              : player.ready
+                                ? "Ready"
+                                : "Not ready yet"
+                          }`
+                        : "A bot joins here when the game starts"}
+                    </small>
                   </div>
+                  {host && player && i !== room.mySeat && (
+                    <button
+                      className="button secondary seat-action"
+                      disabled={!connection.connected}
+                      onClick={() =>
+                        socket.emit("room:remove_player", {
+                          roomId: id,
+                          seatIndex: i,
+                        })
+                      }
+                    >
+                      Free seat
+                    </button>
+                  )}
+                  <span className="seat-number">
+                    {room.gameType === "forty-fives"
+                      ? `Team ${(i % 2) + 1}`
+                      : `Seat ${i + 1}`}
+                  </span>
                 </div>
-              </div>
-            ))}
-            {/* Empty seats */}
-            {Array.from({ length: room.maxPlayers - room.players.length }).map((_, i) => (
-              <div
-                key={`empty-${i}`}
-                className="flex items-center gap-3 border border-dashed border-[var(--border-subtle)] rounded-lg px-3 py-2"
-              >
-                <div className="w-8 h-8 rounded-full bg-[var(--bg-tertiary)] flex items-center justify-center text-[var(--text-muted)] text-sm">?</div>
-                <span className="text-[13px] text-[var(--text-muted)]">
-                  {room.fillWithAI ? 'AI will fill' : 'Waiting...'}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Error */}
-        {error && (
-          <div className="mb-4 px-3 py-2 rounded bg-[var(--accent-red)]/10 border border-[var(--accent-red)]/30 text-[12px] text-[var(--accent-red)]">
-            {error}
-          </div>
-        )}
-
-        {/* Actions */}
-        <div className="flex gap-2">
-          <button
-            onClick={handleLeave}
-            className="flex-1 px-4 py-2.5 text-[13px] border border-[var(--border-subtle)] rounded-lg hover:bg-white/[0.04] transition-colors"
-          >
-            Leave
-          </button>
-          {isHost && (
-            <button
-              onClick={handleStart}
-              disabled={room.players.length < 2}
-              className="flex-1 px-4 py-2.5 text-[13px] font-semibold bg-[var(--accent-green)] text-white rounded-lg hover:brightness-110 disabled:opacity-40 transition-all"
-            >
-              Start Game ({room.players.length}/{room.maxPlayers})
-            </button>
+              );
+            })
+          ) : (
+            <p role="status">Finding your table…</p>
           )}
-        </div>
+          <p className="setup-note">
+            {host
+              ? notReady.length
+                ? `Waiting for ${notReady.map((p) => (p.seatIndex === room?.mySeat ? "you" : p.displayName)).join(" and ")}. At least two people are needed; bots fill any remaining seats.`
+                : "Everyone is ready. Bots fill any remaining seats."
+              : `${room?.host ?? "The host"} starts the game once everyone is ready.`}
+          </p>
+          <div className="waiting-actions">
+            <button
+              className="button secondary"
+              disabled={!connection.connected}
+              onClick={() => {
+                socket.emit("room:leave", { roomId: id });
+                router.push("/");
+              }}
+            >
+              Leave room
+            </button>
+            <button
+              className={`button ${me?.ready ? "secondary" : "primary"} ready-toggle`}
+              aria-pressed={me?.ready === true}
+              disabled={!connection.connected || !me}
+              onClick={() =>
+                socket.emit("room:set_ready", {
+                  roomId: id,
+                  ready: !me?.ready,
+                })
+              }
+            >
+              {me?.ready ? "Not ready" : "I'm ready"}
+            </button>
+            {host && (
+              <button
+                className="button primary"
+                disabled={
+                  starting ||
+                  !connection.connected ||
+                  !room ||
+                  room.players.length < 2 ||
+                  notReady.length > 0 ||
+                  room.players.some((p) => p.connected === false)
+                }
+                onClick={() => {
+                  setStarting(true);
+                  socket.emit("room:start", { roomId: id });
+                }}
+              >
+                {starting ? "Dealing…" : "Start game →"}
+              </button>
+            )}
+          </div>
+        </section>
+        <InvitePanel
+          roomId={id}
+          gameName={gameName}
+          myName={me?.displayName ?? name}
+          canSend={invites?.channels ?? []}
+        />
       </div>
     </div>
   );

@@ -10,6 +10,6 @@ export interface AIPlayer {
   /** Choose cards to pass (Hearts). */
   choosePassCards(state: VisibleGameState, count: number): Card[];
 
-  /** Choose a bid (Spades/Euchre). */
+  /** Choose a bid (Spades, Seven-Six, Forty-Fives). */
   chooseBid(state: VisibleGameState): number | 'pass';
 }

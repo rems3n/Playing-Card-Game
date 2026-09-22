@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="robots" content="noindex,nofollow"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CardArena mobile layout check</title>
+<style>body{font:14px system-ui;margin:20px;background:#e8ece7;color:#183a2d}form,nav{display:flex;gap:8px;margin:12px 0;flex-wrap:wrap}input{width:400px}button,input,select{font:inherit;padding:10px}iframe{display:block;border:2px solid #324a3e;background:white;max-width:none}pre{white-space:pre-wrap}#stage{overflow:auto;max-width:100%}</style></head>
+<body><h1>Mobile layout check</h1><p>Loads the real app in a phone-sized viewport. This checks responsive layout in this browser, not iOS hardware.</p>
+<form id="route"><label>App path <input id="path" value="/"></label><button>Load app</button></form>
+<nav aria-label="Viewport sizes"><button data-size="320,568">320 × 568</button><button data-size="390,664">390 × 664</button><button data-size="430,780">430 × 780</button><button data-size="844,390">844 × 390</button><button data-size="390,540">390 × 540</button></nav>
+<button id="check">Check layout</button><pre id="report" role="status">Load a game, then check its layout.</pre><div id="stage"><iframe title="App at phone size" id="app" width="390" height="664" src="/"></iframe></div>
+<script>
+const frame=document.querySelector('#app'),path=document.querySelector('#path'),report=document.querySelector('#report');
+function load(){const p=path.value;if(!/^\/(?:game\/[\w-]+|room\/[\w-]+|rules|history|auth\/login)?$/.test(p)){report.textContent='Use a relative app path.';return;}frame.src=p;}
+document.querySelector('#route').addEventListener('submit',e=>{e.preventDefault();load();});
+for(const button of document.querySelectorAll('[data-size]'))button.addEventListener('click',()=>{const [w,h]=button.dataset.size.split(',');frame.width=w;frame.height=h;report.textContent=`Viewport ${w} × ${h}. Click Check layout once the app is ready.`;});
+document.querySelector('#check').addEventListener('click',()=>{
+const d=frame.contentDocument,w=frame.contentWindow;const visible=e=>{const r=e.getBoundingClientRect(),s=w.getComputedStyle(e);return r.width>0&&r.height>0&&s.visibility!=='hidden'&&s.display!=='none';};
+const targets=[...d.querySelectorAll('.game-heading,.table-status,.trump-panel,.opponents,.bidding-panel,.bid-options button,.bidding-panel button[type=submit],.hand-panel,.hand-cards button,.hand-action button,.trick-play,.round-result,.my-seat')].filter(visible);
+const outside=targets.filter(e=>{const r=e.getBoundingClientRect();return r.left<-.5||r.top<-.5||r.right>w.innerWidth+.5||r.bottom>w.innerHeight+.5;}).map(e=>({element:e.className||e.tagName,text:(e.getAttribute('aria-label')||e.textContent).trim().slice(0,60),rect:JSON.stringify(e.getBoundingClientRect().toJSON())}));
+const overlap=[];const cards=[...d.querySelectorAll('.hand-cards button')].filter(visible);for(let i=0;i<cards.length;i++)for(let j=i+1;j<cards.length;j++){const a=cards[i].getBoundingClientRect(),b=cards[j].getBoundingClientRect();if(Math.min(a.right,b.right)>Math.max(a.left,b.left)+.5&&Math.min(a.bottom,b.bottom)>Math.max(a.top,b.top)+.5)overlap.push([i,j]);}
+report.textContent=JSON.stringify({viewport:[w.innerWidth,w.innerHeight],phase:d.querySelector('.game-page')?.getAttribute('data-phase'),pageScroll:[d.documentElement.scrollWidth>w.innerWidth+1,d.documentElement.scrollHeight>w.innerHeight+1],checked:targets.length,outside,overlap},null,2);
+});
+</script></body></html>

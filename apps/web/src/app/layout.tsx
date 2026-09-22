@@ -1,11 +1,14 @@
-import type { Metadata } from 'next';
-import './globals.css';
-import { AuthProvider } from '@/components/AuthProvider';
-import { Sidebar } from '@/components/Sidebar';
+import type { Metadata, Viewport } from "next";
+import "./globals.css";
+import { AuthProvider } from "@/components/AuthProvider";
+import { Sidebar } from "@/components/Sidebar";
+
+export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover" };
 
 export const metadata: Metadata = {
-  title: 'CardArena - Seven-Six Card Game',
-  description: 'Play Seven-Six online — a trick-taking bidding card game for 2-7 players. Challenge AI or play with friends!',
+  title: "CardArena — Seven-Six and 45s",
+  description:
+    "Play Seven-Six and 45s online. Trick-taking card games for 2 to 7 players, with friends in a private room or against bots.",
 };
 
 export default function RootLayout({
@@ -15,11 +18,14 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="h-screen overflow-hidden">
+      <body className="app-body">
         <AuthProvider>
-          <div className="flex h-full">
+          <div className="app-shell">
+            <a className="skip-link" href="#main-content">
+              Skip to content
+            </a>
             <Sidebar />
-            <main className="flex-1 min-w-0 h-full overflow-y-auto">
+            <main id="main-content" className="app-main">
               {children}
             </main>
           </div>

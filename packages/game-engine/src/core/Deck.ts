@@ -11,16 +11,6 @@ export function createStandardDeck(): Card[] {
   return cards;
 }
 
-export function createEuchreDeck(): Card[] {
-  const cards: Card[] = [];
-  for (const suit of [Suit.Clubs, Suit.Diamonds, Suit.Hearts, Suit.Spades]) {
-    for (let rank = Rank.Nine; rank <= Rank.Ace; rank++) {
-      cards.push(createCard(suit, rank));
-    }
-  }
-  return cards;
-}
-
 /** Fisher-Yates shuffle. Optionally pass a seed for deterministic shuffling. */
 export function shuffleDeck(cards: Card[], seed?: number): Card[] {
   const shuffled = [...cards];

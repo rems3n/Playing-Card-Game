@@ -61,6 +61,9 @@ RUN mkdir -p apps/server/uploads/avatars
 
 RUN npm ci --omit=dev --ignore-scripts --workspace=@card-game/server --include-workspace-root
 
+RUN chown -R node:node /app/apps/server/uploads
+ENV NODE_ENV=production
+USER node
 WORKDIR /app/apps/server
 
 CMD ["node", "dist/index.js"]

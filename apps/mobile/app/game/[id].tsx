@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Switch } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { GamePhase, GameType, type Card, Suit, Rank, AIDifficulty } from '@card-game/shared-types';
@@ -24,14 +24,15 @@ export default function GameScreen() {
   const socket = useSocket();
   const { gameState, gameOver, setGameState, setGameId, setGameOver, setError } = useGameStore();
   const [selectedBid, setSelectedBid] = useState(0);
+  const [dealPending, setDealPending] = useState(false);
 
   useEffect(() => {
     if (!id) return;
     setGameId(id);
 
-    socket.on('game:state', (state) => setGameState(state));
+    socket.on('game:state', (state) => { if (state.gameId !== id) return; setGameState(state); setDealPending(false); });
     socket.on('game:over', (result) => setGameOver(result));
-    socket.on('game:error', (err) => setError(err.message));
+    socket.on('game:error', (err) => { setError(err.message); setDealPending(false); });
 
     if (socket.connected) {
       socket.emit('game:join', { gameId: id });
@@ -129,6 +130,37 @@ export default function GameScreen() {
           <Text style={[styles.headerText, { color: colors.accentGold }]}>Trump {trumpSymbol}</Text>
         ) : null}
       </View>
+
+      {gameState.trumpCard && (
+        <View style={styles.header}>
+          <View style={styles.card}>
+            <Text style={[styles.cardRank, [Suit.Hearts, Suit.Diamonds].includes(gameState.trumpCard.suit) && styles.redText]}>{RANK_DISPLAY[gameState.trumpCard.rank]}</Text>
+            <Text style={[styles.cardSuit, [Suit.Hearts, Suit.Diamonds].includes(gameState.trumpCard.suit) && styles.redText]}>{SUIT_SYMBOL[gameState.trumpCard.suit]}</Text>
+          </View>
+          <View style={{ justifyContent: 'center' }}>
+            <Text style={[styles.headerText, { fontSize: 22, color: colors.accentGold }]}>Trump {trumpSymbol}</Text>
+            <Text style={styles.muted}>Set aside. No player holds this card.</Text>
+          </View>
+        </View>
+      )}
+      {[GameType.SevenSix, GameType.FortyFives].includes(gameState.gameType) && (
+        <View style={styles.header}>
+          <Text style={styles.headerText}>Automatically deal next hand</Text>
+          <Switch accessibilityLabel="Automatically deal next hand" value={gameState.autoDeal ?? false}
+            disabled={dealPending || !socket.connected}
+            onValueChange={enabled => { setDealPending(true); socket.emit('game:set_auto_deal', { gameId: id, enabled }); }} />
+        </View>
+      )}
+      {gameState.phase === GamePhase.RoundScoring && (
+        <View style={styles.scoreboard}>
+          <Text style={styles.biddingTitle}>Hand complete</Text>
+          {gameState.players.map(p => <Text key={p.seatIndex} style={styles.headerText}>{p.displayName}: +{gameState.roundScores[p.seatIndex]} points</Text>)}
+          <TouchableOpacity style={styles.playAgainBtn} disabled={dealPending || !socket.connected}
+            onPress={() => { setDealPending(true); socket.emit('game:deal_next', { gameId: id, roundNumber: gameState.roundNumber }); }}>
+            <Text style={styles.playAgainText}>{dealPending ? 'Updating…' : 'Deal next hand'}</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Scoreboard with bids */}
       <View style={styles.scoreboard}>

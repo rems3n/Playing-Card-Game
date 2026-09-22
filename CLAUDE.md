@@ -1,6 +1,6 @@
 # CardArena — Playing Card Game Platform
 
-Chess.com-inspired web and mobile platform for playing card games (Hearts, Spades, Euchre, Rummy) against AI or friends.
+Web and mobile platform for playing card games (Seven-Six, Auction 45s, Hearts, Spades, Rummy) against AI or friends.
 
 **Production**: https://cardarena.vercel.app
 **Server**: https://playing-card-game-production.up.railway.app
@@ -24,7 +24,7 @@ packages/                   # Pure TS — shared across web, mobile, and server
   shared-types/             # TypeScript interfaces (Card, GameState, socket events, API types)
   shared-socket/            # Platform-agnostic Socket.io client wrapper (web + mobile)
   shared-store/             # Zustand stores — gameStore, lobbyStore, settingsStore (web + mobile)
-  game-engine/              # Game logic — Card, Deck, StateMachine, HeartsEngine, SpadesEngine, EuchreEngine, RummyEngine
+  game-engine/              # Game logic — Card, Deck, StateMachine, SevenSixEngine, FortyFivesEngine, HeartsEngine, SpadesEngine, RummyEngine
   ai/                       # AI strategies — RandomStrategy, HeuristicStrategy, MonteCarloStrategy
 apps/
   server/                   # Fastify + Socket.io — GameService, gameRoom, matchmaking, ratings, friends
@@ -69,7 +69,7 @@ apps/
 - Embedded `StateMachine` enforces valid phase transitions: WAITING → DEALING → [PASSING|BIDDING] → PLAYING → TRICK_RESOLUTION → ROUND_SCORING → GAME_OVER
 - `getVisibleState(seat)` returns personalized state — **never expose other players' cards**
 - Same engine runs on server (authoritative) and client (optimistic validation)
-- `serialize()/restore()` for Redis persistence — HeartsEngine saves pendingPasses, EuchreEngine saves maker/bower/trump state, RummyEngine saves drawPile/discardPile/playerMelds
+- `serialize()/restore()` for Redis persistence — HeartsEngine saves pendingPasses, FortyFivesEngine saves dealer/declarer/contract/high-trump state, RummyEngine saves drawPile/discardPile/playerMelds
 - Event sourcing: all game actions stored as `GameEvent[]` for replay
 
 ### WebSocket Protocol
@@ -89,11 +89,11 @@ apps/
 - 4 difficulty tiers: Beginner (random), Intermediate (heuristic), Advanced (heuristic+), Expert (Monte Carlo)
 - AI runs server-side — clients can't distinguish AI from human players
 - Bot personalities: Dealer Danny (😎), Lucky Lucy (🤩), Card Shark Sally (🦊), Steady Steve (🧐), Professor Pip (🎩), The Oracle (🔮)
-- Per-game AI: SpadesAI (bid counting, trump management), EuchreAI (trump evaluation, bower awareness), RummyAI (meld finding, draw/discard heuristics)
+- Per-game AI: SpadesAI (bid counting, trump management), FortyFivesAI (hand strength, trump choice, auction), RummyAI (meld finding, draw/discard heuristics)
 
 ### Ratings
 - Glicko-2 with pairwise decomposition for FFA games (Hearts: 4-player → 6 virtual 1v1 matchups)
-- Team-based for partnerships (Spades/Euchre: winning team beats losing team)
+- Team-based for partnerships (Spades/45s: winning team beats losing team)
 - Daily rating snapshots for history charts on profile page
 - Ratings update automatically after every completed game
 
@@ -127,7 +127,7 @@ npx turbo run test --filter=@card-game/game-engine   # 62 tests
 npx turbo run build                                    # Build all packages
 ```
 
-Tests cover: Card utilities, Deck operations, StateMachine transitions, HeartsEngine (21 tests), SpadesEngine (13 tests), EuchreEngine (11 tests).
+Tests cover: Card utilities, Deck operations, StateMachine transitions, HeartsEngine (21 tests), SpadesEngine (13 tests), FortyFivesEngine (92 tests across rules and seeded simulations), SevenSixEngine.
 
 Note: Server integration tests (`GameService.test.ts`) were removed during the Redis persistence refactor — they need Redis mocking to work with the async API.
 

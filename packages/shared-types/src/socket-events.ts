@@ -5,14 +5,19 @@ import type {
   GameType,
   RatingChange,
   VisibleGameState,
-} from './game.js';
+} from "./game.js";
+import type { MediaCredentials, MediaErrorCode } from "./media.js";
+import type { InviteChannel } from "./invite.js";
 
 // ── Waiting room types ──
 
 export interface WaitingRoomPlayer {
+  connected?: boolean;
   displayName: string;
   avatarUrl: string | null;
   isHost: boolean;
+  /** Set by the player themselves. The host cannot start until all are ready. */
+  ready: boolean;
   seatIndex: number;
 }
 
@@ -30,28 +35,36 @@ export interface WaitingRoomState {
 // ── Client → Server events ──
 
 export interface ClientToServerEvents {
-  'game:join': (data: { gameId: string }) => void;
-  'game:leave': (data: { gameId: string }) => void;
-  'game:play_card': (data: { gameId: string; card: Card }) => void;
-  'game:bid': (data: { gameId: string; bid: number | 'pass' }) => void;
-  'game:pass_cards': (data: { gameId: string; cards: Card[] }) => void;
-  'game:call_trump': (data: { gameId: string; suit: string | 'pass' }) => void;
-  'game:go_alone': (data: { gameId: string }) => void;
-  'game:draw_card': (data: { gameId: string; source: 'stock' | 'discard' }) => void;
-  'game:lay_meld': (data: { gameId: string; cards: Card[] }) => void;
-  'game:discard': (data: { gameId: string; card: Card }) => void;
-  'game:replace_with_ai': (data: { gameId: string; seatIndex: number }) => void;
-  'game:end': (data: { gameId: string }) => void;
+  "game:join": (data: { gameId: string }) => void;
+  "game:leave": (data: { gameId: string }) => void;
+  "game:play_card": (data: { gameId: string; card: Card }) => void;
+  "game:bid": (data: { gameId: string; bid: number | "pass" }) => void;
+  "game:deal_next": (data: { gameId: string; roundNumber: number }) => void;
+  "game:set_auto_deal": (data: { gameId: string; enabled: boolean }) => void;
+  "game:pass_cards": (data: { gameId: string; cards: Card[] }) => void;
+  "game:call_trump": (data: { gameId: string; suit: string | "pass" }) => void;
+  "game:go_alone": (data: { gameId: string }) => void;
+  "game:draw_card": (data: {
+    gameId: string;
+    source: "stock" | "discard";
+  }) => void;
+  "game:lay_meld": (data: { gameId: string; cards: Card[] }) => void;
+  "game:discard": (data: { gameId: string; card: Card }) => void;
+  "game:replace_with_ai": (data: { gameId: string; seatIndex: number }) => void;
+  "game:end": (data: { gameId: string }) => void;
 
-  'matchmaking:join': (data: {
+  /** Ask for call credentials for a table this socket already holds a seat at. */
+  "media:token": (data: { gameId: string }) => void;
+
+  "matchmaking:join": (data: {
     gameType: GameType;
     config?: Partial<GameConfig>;
   }) => void;
-  'matchmaking:cancel': () => void;
-  'matchmaking:accept': (data: { matchId: string }) => void;
-  'matchmaking:decline': (data: { matchId: string }) => void;
+  "matchmaking:cancel": () => void;
+  "matchmaking:accept": (data: { matchId: string }) => void;
+  "matchmaking:decline": (data: { matchId: string }) => void;
 
-  'lobby:create_game': (data: {
+  "lobby:create_game": (data: {
     gameType: GameType;
     config?: Partial<GameConfig>;
     aiDifficulty?: AIDifficulty;
@@ -59,98 +72,111 @@ export interface ClientToServerEvents {
   }) => void;
 
   // Waiting room
-  'room:create': (data: {
+  "room:create": (data: {
     gameType: GameType;
     config?: Partial<GameConfig>;
   }) => void;
-  'room:join': (data: { roomId: string }) => void;
-  'room:leave': (data: { roomId: string }) => void;
-  'room:start': (data: { roomId: string }) => void;
+  "room:join": (data: { roomId: string }) => void;
+  "room:leave": (data: { roomId: string }) => void;
+  "room:start": (data: { roomId: string }) => void;
+  "room:set_ready": (data: { roomId: string; ready: boolean }) => void;
+  /** Host only: free a seat held by someone who has stepped away. */
+  "room:remove_player": (data: { roomId: string; seatIndex: number }) => void;
+  /** Ask the server to send an invitation. Refused unless a sender is set up. */
+  "room:send_invite": (data: {
+    roomId: string;
+    channel: InviteChannel;
+    to: string;
+  }) => void;
 
-  'invite:send': (data: {
+  "invite:send": (data: {
     toUserId: string;
     gameType: GameType;
     config?: Partial<GameConfig>;
   }) => void;
-  'invite:respond': (data: {
-    invitationId: string;
-    accept: boolean;
-  }) => void;
+  "invite:respond": (data: { invitationId: string; accept: boolean }) => void;
 
-  'chat:message': (data: { gameId: string; text: string }) => void;
+  "chat:message": (data: { gameId: string; text: string }) => void;
 }
 
 // ── Server → Client events ──
 
 export interface ServerToClientEvents {
-  'game:state': (state: VisibleGameState) => void;
-  'game:card_played': (data: {
+  "game:state": (state: VisibleGameState) => void;
+  "game:card_played": (data: {
     seatIndex: number;
     card: Card;
     nextSeat: number;
   }) => void;
-  'game:trick_complete': (data: {
+  "game:trick_complete": (data: {
     winningSeat: number;
     cards: Array<{ seatIndex: number; card: Card }>;
     points: number;
   }) => void;
-  'game:round_end': (data: {
+  "game:round_end": (data: {
     roundScores: number[];
     totalScores: number[];
   }) => void;
-  'game:phase_change': (data: {
+  "game:phase_change": (data: {
     phase: string;
     data?: Record<string, unknown>;
   }) => void;
-  'game:over': (data: {
+  "game:over": (data: {
+    gameId?: string;
+    saved?: boolean;
     finalScores: number[];
     winnerSeat: number;
     ratingChanges?: RatingChange[];
   }) => void;
-  'game:player_reconnected': (data: { seatIndex: number }) => void;
-  'game:player_disconnected': (data: {
+  "game:player_reconnected": (data: { seatIndex: number }) => void;
+  "game:player_disconnected": (data: {
     seatIndex: number;
     timeoutSeconds: number;
   }) => void;
-  'game:error': (data: { code: string; message: string }) => void;
+  "game:error": (data: { code: string; message: string }) => void;
 
-  'matchmaking:found': (data: {
+  "matchmaking:found": (data: {
     gameId: string;
     opponents: Array<{ displayName: string; seatIndex: number }>;
   }) => void;
-  'matchmaking:waiting': (data: { position: number }) => void;
-  'matchmaking:proposed': (data: {
+  "matchmaking:waiting": (data: { position: number }) => void;
+  "matchmaking:proposed": (data: {
     matchId: string;
     gameType: GameType;
     players: Array<{ displayName: string }>;
     expiresIn: number;
   }) => void;
-  'matchmaking:accepted': (data: { matchId: string; acceptedCount: number; totalCount: number }) => void;
-  'matchmaking:declined': (data: { matchId: string; reason: string }) => void;
+  "matchmaking:accepted": (data: {
+    matchId: string;
+    acceptedCount: number;
+    totalCount: number;
+  }) => void;
+  "matchmaking:declined": (data: { matchId: string; reason: string }) => void;
 
-  'lobby:game_created': (data: { gameId: string }) => void;
+  "lobby:game_created": (data: { gameId: string }) => void;
 
   // Waiting room
-  'room:created': (data: { roomId: string }) => void;
-  'room:update': (state: WaitingRoomState) => void;
-  'room:started': (data: { gameId: string }) => void;
-  'room:error': (data: { message: string }) => void;
+  "room:created": (data: { roomId: string }) => void;
+  "room:update": (state: WaitingRoomState) => void;
+  "room:started": (data: { gameId: string }) => void;
+  "room:error": (data: { message: string }) => void;
+  "room:invite_sent": (data: { channel: InviteChannel; to: string }) => void;
 
-  'invite:received': (data: {
+  "invite:received": (data: {
     invitationId: string;
     fromDisplayName: string;
     gameType: GameType;
   }) => void;
 
-  'chat:message': (data: {
+  "chat:message": (data: {
     seatIndex: number;
     displayName: string;
     text: string;
     timestamp: number;
   }) => void;
 
-  'presence:update': (data: {
-    userId: string;
-    online: boolean;
-  }) => void;
+  "presence:update": (data: { userId: string; online: boolean }) => void;
+
+  "media:credentials": (credentials: MediaCredentials) => void;
+  "media:error": (data: { code: MediaErrorCode; message: string }) => void;
 }

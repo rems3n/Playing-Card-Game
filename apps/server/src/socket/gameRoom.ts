@@ -1,17 +1,26 @@
-import { v4 as uuidv4 } from 'uuid';
-import { Server, Socket } from 'socket.io';
+import { v4 as uuidv4 } from "uuid";
+import { Server, Socket } from "socket.io";
 import type {
   ClientToServerEvents,
   ServerToClientEvents,
   WaitingRoomState,
   WaitingRoomPlayer,
   GameConfig,
-} from '@card-game/shared-types';
-import { GamePhase, AIDifficulty, GameType } from '@card-game/shared-types';
-import { GameService } from '../services/GameService.js';
-import { PersistenceService } from '../services/PersistenceService.js';
-import { PresenceService } from '../services/PresenceService.js';
-import { MatchmakingService } from '../services/MatchmakingService.js';
+} from "@card-game/shared-types";
+import { GamePhase, AIDifficulty, GameType } from "@card-game/shared-types";
+import { GameService } from "../services/GameService.js";
+import { PersistenceService } from "../services/PersistenceService.js";
+import { RoomService, type FamilyRoom } from "../services/RoomService.js";
+import { PresenceService } from "../services/PresenceService.js";
+import { MatchmakingService } from "../services/MatchmakingService.js";
+import {
+  MediaAuthorizationError,
+  MediaService,
+} from "../services/MediaService.js";
+import { createMediaProvider } from "../services/media/index.js";
+import { InviteError, InviteService } from "../services/InviteService.js";
+import { createInviteProvider } from "../services/invite/index.js";
+import { env } from "../config/env.js";
 
 type GameSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 type GameServer = Server<ClientToServerEvents, ServerToClientEvents>;
@@ -19,37 +28,37 @@ type GameServer = Server<ClientToServerEvents, ServerToClientEvents>;
 const persistenceService = new PersistenceService();
 const presenceService = new PresenceService();
 const matchmakingService = new MatchmakingService();
+const defaultMediaService = new MediaService(
+  createMediaProvider(env),
+  env.MEDIA_TOKEN_TTL_SECONDS,
+);
+const defaultInviteService = new InviteService(
+  createInviteProvider(env),
+  env.WEB_URL,
+);
 
 const PLAYERS_PER_GAME: Record<string, number> = {
   hearts: 4,
   spades: 4,
-  euchre: 4,
+  "forty-fives": 4, // default; overridden by config.maxPlayers
   rummy: 4, // default; overridden by config.maxPlayers
-  'seven-six': 4, // default; overridden by config.maxPlayers
+  "seven-six": 4, // default; overridden by config.maxPlayers
 };
 
-// ── Waiting rooms ──
-interface WaitingRoom {
-  id: string;
-  gameType: GameType;
-  hostSocketId: string;
-  starting?: boolean;
-  hostDisplayName: string;
-  players: Array<{ socketId: string; displayName: string; userId: string | null }>;
-  maxPlayers: number;
-  config?: Partial<GameConfig>;
-}
-
-const waitingRooms = new Map<string, WaitingRoom>();
 const disconnectTimers = new Map<string, NodeJS.Timeout>(); // `gameId:seat` → timer
 const RECONNECT_TIMEOUT = 30_000; // 30 seconds
+const MEDIA_TOKEN_INTERVAL = 3_000; // shortest gap between call tickets
 const MATCH_ACCEPT_TIMEOUT = 15_000; // 15 seconds to accept
 
 // Pending match proposals
 interface PendingMatch {
   matchId: string;
   gameType: GameType;
-  players: Array<{ socketId: string; displayName: string; userId: string | null }>;
+  players: Array<{
+    socketId: string;
+    displayName: string;
+    userId: string | null;
+  }>;
   accepted: Set<string>; // socketIds that accepted
   timer: NodeJS.Timeout;
 }
@@ -58,11 +67,15 @@ const pendingMatches = new Map<string, PendingMatch>();
 export function setupGameHandlers(
   io: GameServer,
   gameService: GameService,
+  rooms = new RoomService(),
+  media: MediaService = defaultMediaService,
+  invites: InviteService = defaultInviteService,
 ): void {
-  io.on('connection', (socket: GameSocket) => {
+  io.on("connection", (socket: GameSocket) => {
     console.log(`Client connected: ${socket.id}`);
     const userId = socket.data?.user?.id ?? null;
-    const displayName = socket.data?.displayName ?? 'Guest';
+    const displayName = socket.data?.displayName ?? "Guest";
+    const participantId = socket.data?.participantId ?? socket.id;
 
     // Track presence
     if (userId) {
@@ -70,7 +83,7 @@ export function setupGameHandlers(
     }
 
     // ── Create a game (vs AI) ──
-    socket.on('lobby:create_game', async (data) => {
+    socket.on("lobby:create_game", async (data) => {
       try {
         const gameId = gameService.createGame(
           data.gameType,
@@ -78,7 +91,22 @@ export function setupGameHandlers(
           data.aiDifficulty,
         );
 
-        const seat = await gameService.joinGame(gameId, socket.id, displayName, userId ?? undefined);
+        const previous = await gameService.getRoom(gameId);
+        if (previous)
+          for (const [seat, oldSocket] of previous.playerSockets) {
+            if (
+              previous.participants.get(seat) === participantId &&
+              oldSocket !== socket.id
+            )
+              await io.sockets.sockets.get(oldSocket)?.leave(gameId);
+          }
+        const seat = await gameService.joinGame(
+          gameId,
+          socket.id,
+          displayName,
+          userId ?? undefined,
+          participantId,
+        );
         await socket.join(gameId);
 
         if (data.fillWithAI !== false) {
@@ -88,14 +116,14 @@ export function setupGameHandlers(
           );
         }
 
-        socket.emit('lobby:game_created', { gameId });
+        socket.emit("lobby:game_created", { gameId });
 
         await gameService.startGame(gameId);
 
         const state = await gameService.getVisibleState(gameId, seat);
-        socket.emit('game:state', state);
+        socket.emit("game:state", state);
 
-        // Handle AI turns (passing in Hearts, bidding in Spades/Euchre)
+        // Handle AI turns (passing in Hearts, bidding in Spades/Seven-Six/45s)
         await handleAITurns(io, gameService, gameId);
         await broadcastStates(io, gameService, gameId);
 
@@ -105,15 +133,15 @@ export function setupGameHandlers(
           await handleAITurns(io, gameService, gameId);
         }
       } catch (err: any) {
-        socket.emit('game:error', {
-          code: 'CREATE_FAILED',
+        socket.emit("game:error", {
+          code: "CREATE_FAILED",
           message: err.message,
         });
       }
     });
 
     // ── Join matchmaking queue ──
-    socket.on('matchmaking:join', async (data) => {
+    socket.on("matchmaking:join", async (data) => {
       try {
         const gameType = data.gameType;
 
@@ -125,8 +153,11 @@ export function setupGameHandlers(
           joinedAt: Date.now(),
         });
 
-        const position = await matchmakingService.getPosition(gameType, socket.id);
-        socket.emit('matchmaking:waiting', { position: position ?? 1 });
+        const position = await matchmakingService.getPosition(
+          gameType,
+          socket.id,
+        );
+        socket.emit("matchmaking:waiting", { position: position ?? 1 });
 
         // Try to propose a match — need at least 2 humans
         const MIN_HUMANS = 2;
@@ -135,7 +166,10 @@ export function setupGameHandlers(
 
         if (queueSize >= MIN_HUMANS) {
           const humanCount = Math.min(queueSize, totalPlayers);
-          const matched = await matchmakingService.tryMatch(gameType, humanCount);
+          const matched = await matchmakingService.tryMatch(
+            gameType,
+            humanCount,
+          );
 
           if (matched) {
             // Create a match proposal — players must accept
@@ -155,7 +189,10 @@ export function setupGameHandlers(
               for (const player of pending.players) {
                 const s = io.sockets.sockets.get(player.socketId);
                 if (s) {
-                  s.emit('matchmaking:declined', { matchId, reason: 'Timed out — not all players accepted' });
+                  s.emit("matchmaking:declined", {
+                    matchId,
+                    reason: "Timed out — not all players accepted",
+                  });
                   // Put them back in queue
                   matchmakingService.joinQueue(gameType, {
                     socketId: player.socketId,
@@ -180,7 +217,7 @@ export function setupGameHandlers(
             for (const player of players) {
               const s = io.sockets.sockets.get(player.socketId);
               if (s) {
-                s.emit('matchmaking:proposed', {
+                s.emit("matchmaking:proposed", {
                   matchId,
                   gameType: gameType as GameType,
                   players: players.map((p) => ({ displayName: p.displayName })),
@@ -191,12 +228,15 @@ export function setupGameHandlers(
           }
         }
       } catch (err: any) {
-        socket.emit('game:error', { code: 'MATCHMAKING_FAILED', message: err.message });
+        socket.emit("game:error", {
+          code: "MATCHMAKING_FAILED",
+          message: err.message,
+        });
       }
     });
 
     // ── Accept a match proposal ──
-    socket.on('matchmaking:accept', async (data) => {
+    socket.on("matchmaking:accept", async (data) => {
       const pending = pendingMatches.get(data.matchId);
       if (!pending) return;
 
@@ -206,7 +246,7 @@ export function setupGameHandlers(
       for (const player of pending.players) {
         const s = io.sockets.sockets.get(player.socketId);
         if (s) {
-          s.emit('matchmaking:accepted', {
+          s.emit("matchmaking:accepted", {
             matchId: data.matchId,
             acceptedCount: pending.accepted.size,
             totalCount: pending.players.length,
@@ -224,7 +264,14 @@ export function setupGameHandlers(
         const gameId = gameService.createGame(pending.gameType);
 
         for (const player of pending.players) {
-          await gameService.joinGame(gameId, player.socketId, player.displayName, player.userId ?? undefined);
+          await gameService.joinGame(
+            gameId,
+            player.socketId,
+            player.displayName,
+            player.userId ?? undefined,
+            io.sockets.sockets.get(player.socketId)?.data.participantId ??
+              player.socketId,
+          );
           const s = io.sockets.sockets.get(player.socketId);
           if (s) await s.join(gameId);
         }
@@ -239,15 +286,29 @@ export function setupGameHandlers(
         for (const player of pending.players) {
           const s = io.sockets.sockets.get(player.socketId);
           if (s) {
-            const seat = await gameService.getSeatForSocket(gameId, player.socketId);
+            const seat = await gameService.getSeatForSocket(
+              gameId,
+              player.socketId,
+            );
             if (seat !== undefined) {
               const opponents = [];
-              for (const p of pending.players.filter((p) => p.socketId !== player.socketId)) {
-                const pSeat = await gameService.getSeatForSocket(gameId, p.socketId);
-                opponents.push({ displayName: p.displayName, seatIndex: pSeat ?? 0 });
+              for (const p of pending.players.filter(
+                (p) => p.socketId !== player.socketId,
+              )) {
+                const pSeat = await gameService.getSeatForSocket(
+                  gameId,
+                  p.socketId,
+                );
+                opponents.push({
+                  displayName: p.displayName,
+                  seatIndex: pSeat ?? 0,
+                });
               }
-              s.emit('matchmaking:found', { gameId, opponents });
-              s.emit('game:state', await gameService.getVisibleState(gameId, seat));
+              s.emit("matchmaking:found", { gameId, opponents });
+              s.emit(
+                "game:state",
+                await gameService.getVisibleState(gameId, seat),
+              );
             }
           }
         }
@@ -257,7 +318,7 @@ export function setupGameHandlers(
     });
 
     // ── Decline a match proposal ──
-    socket.on('matchmaking:decline', async (data) => {
+    socket.on("matchmaking:decline", async (data) => {
       const pending = pendingMatches.get(data.matchId);
       if (!pending) return;
 
@@ -269,9 +330,15 @@ export function setupGameHandlers(
         const s = io.sockets.sockets.get(player.socketId);
         if (s) {
           if (player.socketId === socket.id) {
-            s.emit('matchmaking:declined', { matchId: data.matchId, reason: 'You declined' });
+            s.emit("matchmaking:declined", {
+              matchId: data.matchId,
+              reason: "You declined",
+            });
           } else {
-            s.emit('matchmaking:declined', { matchId: data.matchId, reason: 'A player declined' });
+            s.emit("matchmaking:declined", {
+              matchId: data.matchId,
+              reason: "A player declined",
+            });
             // Put them back in queue
             matchmakingService.joinQueue(pending.gameType, {
               socketId: player.socketId,
@@ -286,161 +353,242 @@ export function setupGameHandlers(
     });
 
     // ── Cancel matchmaking ──
-    socket.on('matchmaking:cancel', async () => {
+    socket.on("matchmaking:cancel", async () => {
       await matchmakingService.leaveAllQueues(socket.id);
 
       // Also decline any pending matches
       for (const [matchId, pending] of pendingMatches) {
         if (pending.players.some((p) => p.socketId === socket.id)) {
-          socket.emit('matchmaking:decline' as any, { matchId });
+          socket.emit("matchmaking:decline" as any, { matchId });
         }
       }
     });
 
-    // ── Create a waiting room ──
-    socket.on('room:create', async (data) => {
-      const roomId = uuidv4().slice(0, 8); // short room code
-      const maxPlayers = data.config?.maxPlayers ?? PLAYERS_PER_GAME[data.gameType] ?? 4;
-
-      const room: WaitingRoom = {
-        id: roomId,
-        gameType: data.gameType as GameType,
-        hostSocketId: socket.id,
-        hostDisplayName: displayName,
-        players: [{ socketId: socket.id, displayName, userId }],
-        maxPlayers,
-        config: data.config,
-      };
-
-      waitingRooms.set(roomId, room);
-      await socket.join(`room:${roomId}`);
-      socket.emit('room:created', { roomId });
-      broadcastRoomState(io, room);
+    const loadRoom = async (id: string) => {
+      const room = await rooms.load(id);
+      if (room) rooms.reconcile(room, (sid) => io.sockets.sockets.has(sid));
+      return room;
+    };
+    const roomError = (err: unknown) =>
+      socket.emit("room:error", {
+        message: err instanceof Error ? err.message : "Could not update room",
+      });
+    const participant = () => ({
+      id: participantId,
+      socketId: socket.id,
+      userId,
+      displayName,
+      connected: true,
     });
-
-    // ── Join a waiting room ──
-    socket.on('room:join', async (data) => {
-      const room = waitingRooms.get(data.roomId);
-      if (!room) {
-        socket.emit('room:error', { message: 'Room not found' });
-        return;
-      }
-      if (room.players.some((p) => p.socketId === socket.id)) {
-        // Already in room
-        socket.emit('room:update', toRoomState(room, socket.id));
-        return;
-      }
-
-      if (room.players.length >= room.maxPlayers) {
-        socket.emit('room:error', { message: 'Room is full' });
-        return;
-      }
-      if (room.starting) {
-        socket.emit('room:error', { message: 'Game is starting' });
-        return;
-      }
-
-      room.players.push({ socketId: socket.id, displayName, userId });
-      await socket.join(`room:${room.id}`);
-      broadcastRoomState(io, room);
-    });
-
-    // ── Leave a waiting room ──
-    socket.on('room:leave', async (data) => {
-      const room = waitingRooms.get(data.roomId);
-      if (!room) return;
-
-      room.players = room.players.filter((p) => p.socketId !== socket.id);
-      socket.leave(`room:${room.id}`);
-
-      if (room.players.length === 0) {
-        waitingRooms.delete(room.id);
-      } else {
-        // If host left, make next player host
-        if (room.hostSocketId === socket.id) {
-          room.hostSocketId = room.players[0].socketId;
-          room.hostDisplayName = room.players[0].displayName;
-        }
-        broadcastRoomState(io, room);
-      }
-    });
-
-    // ── Host starts the game ──
-    socket.on('room:start', async (data) => {
-      const room = waitingRooms.get(data.roomId);
-      if (!room) {
-        socket.emit('room:error', { message: 'Room not found' });
-        return;
-      }
-      if (room.hostSocketId !== socket.id) {
-        socket.emit('room:error', { message: 'Only the host can start' });
-        return;
-      }
-      if (room.players.length < 2) {
-        socket.emit('room:error', { message: 'Need at least 2 players' });
-        return;
-      }
-
-      if (room.starting) return;
-      room.starting = true;
-      let gameId: string | undefined;
+    socket.on("room:create", async (data) => {
       try {
-        // Create the actual game
-        gameId = gameService.createGame(room.gameType, room.config);
-
-        for (const player of room.players) {
-          await gameService.joinGame(gameId, player.socketId, player.displayName, player.userId ?? undefined);
-          const playerSocket = io.sockets.sockets.get(player.socketId);
-          if (playerSocket) {
-            await playerSocket.join(gameId);
+        const room = await rooms.create(
+          data.gameType,
+          data.config ?? {},
+          participant(),
+        );
+        socket.data.waitingRoomId = room.id;
+        await socket.join(`room:${room.id}`);
+        socket.emit("room:created", { roomId: room.id });
+        broadcastRoomState(io, room);
+      } catch (err) {
+        roomError(err);
+      }
+    });
+    socket.on("room:join", async (data) => {
+      try {
+        await rooms.queue.run(String(data.roomId).toLowerCase(), async () => {
+          const room = await loadRoom(data.roomId);
+          if (!room || !room.players.length)
+            throw new Error("Room not found or expired");
+          const existing = room.players.find((p) => p.id === participantId);
+          if (room.gameId) {
+            if (!existing) throw new Error("This game has already started");
+            socket.emit("room:started", { gameId: room.gameId });
+            return;
           }
-        }
-
-        // Fill remaining seats with AI
-        if (room.players.length < room.maxPlayers) {
-          await gameService.fillWithAI(gameId, AIDifficulty.Intermediate);
-        }
-
-        await gameService.startGame(gameId);
-
-        // Notify all players
-        io.to(`room:${room.id}`).emit('room:started', { gameId });
-
-        // Send game state to each player
-        for (const player of room.players) {
-          const seat = await gameService.getSeatForSocket(gameId, player.socketId);
-          if (seat !== undefined) {
-            const playerSocket = io.sockets.sockets.get(player.socketId);
-            if (playerSocket) {
-              playerSocket.emit('game:state', await gameService.getVisibleState(gameId, seat));
-            }
-          }
-        }
-
-        // Clean up room
-        waitingRooms.delete(room.id);
-
-        // A bot failure must not roll back a game players have already entered.
-        await handleAITurns(io, gameService, gameId).catch((err) => {
-          io.to(gameId!).emit('game:error', { code: 'AI_FAILED', message: err instanceof Error ? err.message : 'Bot turn failed' });
+          if (!existing && room.players.length >= room.maxPlayers)
+            throw new Error("Room is full");
+          if (existing) {
+            io.sockets.sockets.get(existing.socketId)?.leave(`room:${room.id}`);
+            // Keep the seat and the ready flag: a refresh is not a change of mind.
+            Object.assign(existing, participant(), {
+              ready: existing.ready === true,
+              disconnectedAt: undefined,
+            });
+          } else room.players.push(participant());
+          socket.data.waitingRoomId = room.id;
+          await socket.join(`room:${room.id}`);
+          await rooms.save(room);
+          broadcastRoomState(io, room);
         });
       } catch (err) {
-        if (gameId) {
-          for (const player of room.players) io.sockets.sockets.get(player.socketId)?.leave(gameId);
-          await gameService.removeGame(gameId).catch(() => {});
-        }
-        socket.emit('room:error', { message: err instanceof Error ? err.message : 'Could not start game' });
-      } finally {
-        room.starting = false;
+        roomError(err);
       }
+    });
+    socket.on("room:leave", async (data) => {
+      try {
+        await rooms.queue.run(String(data.roomId).toLowerCase(), async () => {
+          const room = await loadRoom(data.roomId);
+          if (!room || room.gameId) return;
+          room.players = room.players.filter(
+            (p) => p.id !== participantId || p.socketId !== socket.id,
+          );
+          if (!room.players.some((p) => p.id === room.hostId))
+            room.hostId = room.players[0]?.id ?? "";
+          await socket.leave(`room:${room.id}`);
+          delete socket.data.waitingRoomId;
+          await rooms.save(room);
+          broadcastRoomState(io, room);
+        });
+      } catch (err) {
+        roomError(err);
+      }
+    });
+    socket.on("room:set_ready", async (data) => {
+      try {
+        await rooms.queue.run(String(data.roomId).toLowerCase(), async () => {
+          const room = await loadRoom(data.roomId);
+          if (!room || room.gameId) return;
+          const player = room.players.find(
+            (p) => p.id === participantId && p.socketId === socket.id,
+          );
+          if (!player) throw new Error("You are not at this table");
+          player.ready = data.ready === true;
+          await rooms.save(room);
+          broadcastRoomState(io, room);
+        });
+      } catch (err) {
+        roomError(err);
+      }
+    });
 
+    // Host control: free a seat held by someone who has stepped away, so the
+    // table is not stuck waiting for a person who is not coming back.
+    socket.on("room:remove_player", async (data) => {
+      try {
+        await rooms.queue.run(String(data.roomId).toLowerCase(), async () => {
+          const room = await loadRoom(data.roomId);
+          if (!room || room.gameId) return;
+          if (room.hostId !== participantId)
+            throw new Error("Only the host can free a seat");
+          const player = room.players[data.seatIndex];
+          if (!player) throw new Error("There is nobody in that seat");
+          if (player.id === participantId)
+            throw new Error("Leave the room to give up your own seat");
+          room.players = room.players.filter((p) => p !== player);
+          const removed = io.sockets.sockets.get(player.socketId);
+          await removed?.leave(`room:${room.id}`);
+          if (removed) delete removed.data.waitingRoomId;
+          removed?.emit("room:error", {
+            message: "The host freed your seat at that table.",
+          });
+          await rooms.save(room);
+          broadcastRoomState(io, room);
+        });
+      } catch (err) {
+        roomError(err);
+      }
+    });
+
+    socket.on("room:send_invite", async (data) => {
+      try {
+        const room = await loadRoom(data?.roomId);
+        const sent = await invites.send(
+          room,
+          participantId,
+          data?.channel,
+          data?.to,
+        );
+        socket.emit("room:invite_sent", sent);
+      } catch (err) {
+        socket.emit("room:error", {
+          message:
+            err instanceof InviteError
+              ? err.message
+              : "The invitation could not be sent. Share the link instead.",
+        });
+      }
+    });
+
+    socket.on("room:start", async (data) => {
+      let started: string | undefined;
+      try {
+        await rooms.queue.run(String(data.roomId).toLowerCase(), async () => {
+          const room = await loadRoom(data.roomId);
+          if (!room) throw new Error("Room not found");
+          if (
+            room.hostId !== participantId ||
+            !room.players.some(
+              (p) => p.id === participantId && p.socketId === socket.id,
+            )
+          )
+            throw new Error("Only the host can start");
+          if (room.gameId) return;
+          if (room.players.length < 2)
+            throw new Error("Need at least 2 players");
+          if (room.players.some((p) => !io.sockets.sockets.has(p.socketId)))
+            throw new Error("Wait for everyone to reconnect before starting");
+          const waiting = room.players.filter((p) => p.ready !== true);
+          if (waiting.length)
+            throw new Error(
+              `Waiting for ${waiting.map((p) => p.displayName).join(" and ")} to be ready`,
+            );
+          const gameId = gameService.createGame(room.gameType, room.config);
+          try {
+            for (const player of room.players) {
+              await gameService.joinGame(
+                gameId,
+                player.socketId,
+                player.displayName,
+                player.userId ?? undefined,
+                player.id,
+              );
+              await io.sockets.sockets.get(player.socketId)?.join(gameId);
+            }
+            if (room.players.length < room.maxPlayers)
+              await gameService.fillWithAI(gameId, AIDifficulty.Intermediate);
+            await gameService.startGame(gameId);
+            room.gameId = gameId;
+            await rooms.save(room);
+            started = gameId;
+            io.to(`room:${room.id}`).emit("room:started", { gameId });
+          } catch (err) {
+            for (const player of room.players)
+              await io.sockets.sockets.get(player.socketId)?.leave(gameId);
+            await gameService.removeGame(gameId).catch(() => {});
+            throw err;
+          }
+        });
+        if (started) {
+          await broadcastStates(io, gameService, started);
+          await handleAITurns(io, gameService, started);
+        }
+      } catch (err) {
+        roomError(err);
+      }
     });
 
     // ── Join an existing game ──
-    socket.on('game:join', async (data) => {
+    socket.on("game:join", async (data) => {
       try {
         const { gameId } = data;
-        const seat = await gameService.joinGame(gameId, socket.id, displayName, userId ?? undefined);
+        const previous = await gameService.getRoom(gameId);
+        if (previous)
+          for (const [seat, oldSocket] of previous.playerSockets) {
+            if (
+              previous.participants.get(seat) === participantId &&
+              oldSocket !== socket.id
+            )
+              await io.sockets.sockets.get(oldSocket)?.leave(gameId);
+          }
+        const seat = await gameService.joinGame(
+          gameId,
+          socket.id,
+          displayName,
+          userId ?? undefined,
+          participantId,
+        );
         await socket.join(gameId);
 
         // Cancel any pending disconnect timer for this seat
@@ -459,15 +607,16 @@ export function setupGameHandlers(
         }
 
         const state = await gameService.getVisibleState(gameId, seat);
-        socket.emit('game:state', state);
+        socket.emit("game:state", state);
 
-        io.to(gameId).emit('game:player_reconnected', { seatIndex: seat });
+        io.to(gameId).emit("game:player_reconnected", { seatIndex: seat });
 
         // Broadcast updated state to all players (shows reconnected status)
         await broadcastStates(io, gameService, gameId);
+        await handleAITurns(io, gameService, gameId);
       } catch (err: any) {
-        socket.emit('game:error', {
-          code: 'JOIN_FAILED',
+        socket.emit("game:error", {
+          code: "JOIN_FAILED",
           message: err.message,
         });
       }
@@ -475,23 +624,35 @@ export function setupGameHandlers(
 
     // ── Play a card ──
     // ── Replace disconnected player with AI ──
-    socket.on('game:replace_with_ai', async (data) => {
+    socket.on("game:replace_with_ai", async (data) => {
       const { gameId, seatIndex } = data;
-      if (await gameService.getSeatForSocket(gameId, socket.id) === undefined) {
-        socket.emit('game:error', { code: 'NOT_IN_GAME', message: 'You are not in this game' });
+      if (
+        (await gameService.getSeatForSocket(gameId, socket.id)) === undefined
+      ) {
+        socket.emit("game:error", {
+          code: "NOT_IN_GAME",
+          message: "You are not in this game",
+        });
         return;
       }
       try {
         await gameService.replaceWithAI(gameId, seatIndex);
       } catch (err) {
-        socket.emit('game:error', { code: 'REPLACE_FAILED', message: err instanceof Error ? err.message : 'Could not replace player' });
+        socket.emit("game:error", {
+          code: "REPLACE_FAILED",
+          message:
+            err instanceof Error ? err.message : "Could not replace player",
+        });
         return;
       }
 
       // Cancel the timer
       const timerKey = `${gameId}:${seatIndex}`;
       const timer = disconnectTimers.get(timerKey);
-      if (timer) { clearTimeout(timer); disconnectTimers.delete(timerKey); }
+      if (timer) {
+        clearTimeout(timer);
+        disconnectTimers.delete(timerKey);
+      }
 
       // Broadcast updated state
       broadcastStates(io, gameService, gameId);
@@ -507,16 +668,22 @@ export function setupGameHandlers(
     });
 
     // ── End game early ──
-    socket.on('game:end', async (data) => {
+    socket.on("game:end", async (data) => {
       const { gameId } = data;
       const room = await gameService.getRoom(gameId);
       if (!room) return;
-      if (await gameService.getSeatForSocket(gameId, socket.id) === undefined) {
-        socket.emit('game:error', { code: 'NOT_IN_GAME', message: 'You are not in this game' });
+      if (
+        (await gameService.getSeatForSocket(gameId, socket.id)) === undefined
+      ) {
+        socket.emit("game:error", {
+          code: "NOT_IN_GAME",
+          message: "You are not in this game",
+        });
         return;
       }
 
-      io.to(gameId).emit('game:over', {
+      io.to(gameId).emit("game:over", {
+        gameId,
         finalScores: room.engine.getState().scores,
         winnerSeat: -1, // no winner
       });
@@ -524,7 +691,7 @@ export function setupGameHandlers(
     });
 
     // ── Leave a game (voluntary) ──
-    socket.on('game:leave', async (data) => {
+    socket.on("game:leave", async (data) => {
       const { gameId } = data;
       const seat = gameService.handlePlayerDisconnect(gameId, socket.id);
       if (seat === -1) return;
@@ -532,7 +699,7 @@ export function setupGameHandlers(
       socket.leave(gameId);
 
       // Notify others this player left
-      io.to(gameId).emit('game:player_disconnected', {
+      io.to(gameId).emit("game:player_disconnected", {
         seatIndex: seat,
         timeoutSeconds: 30,
       });
@@ -541,80 +708,85 @@ export function setupGameHandlers(
       startDisconnectTimer(io, gameService, gameId, seat);
     });
 
+    // ── Call credentials for this table ──
+    // One ticket at a time per socket: a token is cheap to issue but it is the
+    // one thing here that reaches a paid third party.
+    let lastTokenAt = 0;
+    // The seat, name, room and permissions are all decided here. A failure
+    // returns an error the client can show beside the table; the card game is
+    // never interrupted by it.
+    socket.on("media:token", async (data) => {
+      try {
+        const now = Date.now();
+        if (now - lastTokenAt < MEDIA_TOKEN_INTERVAL)
+          throw new MediaAuthorizationError(
+            "MEDIA_TOKEN_FAILED",
+            "Wait a moment before rejoining the call.",
+          );
+        lastTokenAt = now;
+        const credentials = await media.issueCredentials(
+          gameService,
+          data?.gameId,
+          participantId,
+        );
+        socket.emit("media:credentials", credentials);
+      } catch (err) {
+        const failure =
+          err instanceof MediaAuthorizationError
+            ? err
+            : new MediaAuthorizationError(
+                "MEDIA_TOKEN_FAILED",
+                "Could not start the call. The game is unaffected.",
+              );
+        socket.emit("media:error", {
+          code: failure.code,
+          message: failure.message,
+        });
+      }
+    });
+
     // ── Play a card ──
-    socket.on('game:play_card', async (data) => {
+    socket.on("game:play_card", async (data) => {
       try {
         const { gameId, card } = data;
         const seat = await gameService.getSeatForSocket(gameId, socket.id);
         if (seat === undefined) {
-          socket.emit('game:error', { code: 'NOT_IN_GAME', message: 'You are not in this game' });
+          socket.emit("game:error", {
+            code: "NOT_IN_GAME",
+            message: "You are not in this game",
+          });
           return;
         }
 
-        await gameService.playCard(gameId, seat, card);
-
+        const trick = await gameService.playCard(gameId, seat, card);
         const room = await gameService.getRoom(gameId);
         if (!room) return;
-        const state = room.engine.getState();
-
-        io.to(gameId).emit('game:card_played', {
+        io.to(gameId).emit("game:card_played", {
           seatIndex: seat,
           card,
-          nextSeat: state.currentPlayerSeat,
+          nextSeat: room.engine.getState().currentPlayerSeat,
         });
-
-        if (state.phase === GamePhase.TrickResolution || state.currentTrick.length === 0) {
-          const events = room.engine.getEvents();
-          const lastTrickEvent = [...events].reverse().find((e) => e.type === 'trick_completed');
-          if (lastTrickEvent) {
-            io.to(gameId).emit('game:trick_complete', {
-              winningSeat: lastTrickEvent.seatIndex!,
-              cards: lastTrickEvent.payload.cards as any,
-              points: lastTrickEvent.payload.points as number,
-            });
-            // Pause so players can see the completed trick before clearing
-            await new Promise((r) => setTimeout(r, 2500));
-          }
-        }
-
-        if (state.phase === GamePhase.RoundScoring || state.phase === GamePhase.Passing || state.phase === GamePhase.Dealing) {
-          io.to(gameId).emit('game:round_end', {
-            roundScores: state.roundScores,
-            totalScores: state.scores,
-          });
-        }
-
-        if (state.phase === GamePhase.GameOver) {
-          const winner = room.engine.getWinnerSeat();
-          const ratingChanges = await persistenceService.saveCompletedGame(gameId, room, winner);
-          io.to(gameId).emit('game:over', {
-            finalScores: state.scores,
-            winnerSeat: winner,
-            ratingChanges: ratingChanges.map((r) => ({
-              userId: r.userId,
-              gameType: state.gameType as any,
-              before: r.before,
-              after: r.after,
-              change: r.change,
-            })),
-          });
-          return;
-        }
-
+        if (trick) io.to(gameId).emit("game:trick_complete", trick);
         await broadcastStates(io, gameService, gameId);
         await handleAITurns(io, gameService, gameId);
       } catch (err: any) {
-        socket.emit('game:error', { code: 'PLAY_FAILED', message: err.message });
+        socket.emit("game:error", {
+          code: "PLAY_FAILED",
+          message: err.message,
+        });
       }
     });
 
     // ── Pass cards (Hearts) ──
-    socket.on('game:pass_cards', async (data) => {
+    socket.on("game:pass_cards", async (data) => {
       try {
         const { gameId, cards } = data;
         const seat = await gameService.getSeatForSocket(gameId, socket.id);
         if (seat === undefined) {
-          socket.emit('game:error', { code: 'NOT_IN_GAME', message: 'You are not in this game' });
+          socket.emit("game:error", {
+            code: "NOT_IN_GAME",
+            message: "You are not in this game",
+          });
           return;
         }
 
@@ -633,25 +805,60 @@ export function setupGameHandlers(
           await handleAITurns(io, gameService, gameId);
         }
       } catch (err: any) {
-        socket.emit('game:error', { code: 'PASS_FAILED', message: err.message });
+        socket.emit("game:error", {
+          code: "PASS_FAILED",
+          message: err.message,
+        });
       }
     });
 
-    // ── Bid (Spades) ──
-    socket.on('game:bid', async (data) => {
+    socket.on("game:deal_next", async ({ gameId, roundNumber }) => {
+      try {
+        if ((await gameService.getSeatForSocket(gameId, socket.id)) === undefined)
+          throw new Error("You are not in this game");
+        await gameService.dealNextRound(gameId, roundNumber);
+        await broadcastStates(io, gameService, gameId);
+        await handleAITurns(io, gameService, gameId);
+      } catch (err: any) {
+        socket.emit("game:error", { code: "DEAL_FAILED", message: err.message });
+      }
+    });
+
+    socket.on("game:set_auto_deal", async ({ gameId, enabled }) => {
+      try {
+        if ((await gameService.getSeatForSocket(gameId, socket.id)) === undefined)
+          throw new Error("You are not in this game");
+        await gameService.setAutoDeal(gameId, enabled);
+        await broadcastStates(io, gameService, gameId);
+        await handleAITurns(io, gameService, gameId);
+      } catch (err: any) {
+        socket.emit("game:error", { code: "AUTO_DEAL_FAILED", message: err.message });
+      }
+    });
+
+    // ── Bid (Spades / Seven-Six) ──
+    socket.on("game:bid", async (data) => {
       try {
         const { gameId, bid } = data;
+        if (typeof bid !== "number" || !Number.isInteger(bid))
+          throw new Error("Choose a whole-number bid.");
         const seat = await gameService.getSeatForSocket(gameId, socket.id);
         if (seat === undefined) {
-          socket.emit('game:error', { code: 'NOT_IN_GAME', message: 'You are not in this game' });
+          socket.emit("game:error", {
+            code: "NOT_IN_GAME",
+            message: "You are not in this game",
+          });
           return;
         }
 
         const room = await gameService.getRoom(gameId);
-        if (room?.gameType === GameType.SevenSix) {
-          await gameService.sevenSixPlaceBid(gameId, seat, typeof bid === 'number' ? bid : 0);
+        if (
+          room?.gameType === GameType.SevenSix ||
+          room?.gameType === GameType.FortyFives
+        ) {
+          await gameService.placeFamilyBid(gameId, seat, bid);
         } else {
-          await gameService.placeBid(gameId, seat, typeof bid === 'number' ? bid : 0);
+          await gameService.placeBid(gameId, seat, bid);
         }
         await broadcastStates(io, gameService, gameId);
 
@@ -665,17 +872,20 @@ export function setupGameHandlers(
           await handleAITurns(io, gameService, gameId);
         }
       } catch (err: any) {
-        socket.emit('game:error', { code: 'BID_FAILED', message: err.message });
+        socket.emit("game:error", { code: "BID_FAILED", message: err.message });
       }
     });
 
-    // ── Call trump (Euchre) ──
-    socket.on('game:call_trump', async (data) => {
+    // ── Name trump (45s: the winner of the auction) ──
+    socket.on("game:call_trump", async (data) => {
       try {
         const { gameId, suit } = data;
         const seat = await gameService.getSeatForSocket(gameId, socket.id);
         if (seat === undefined) {
-          socket.emit('game:error', { code: 'NOT_IN_GAME', message: 'You are not in this game' });
+          socket.emit("game:error", {
+            code: "NOT_IN_GAME",
+            message: "You are not in this game",
+          });
           return;
         }
 
@@ -692,34 +902,46 @@ export function setupGameHandlers(
           await handleAITurns(io, gameService, gameId);
         }
       } catch (err: any) {
-        socket.emit('game:error', { code: 'TRUMP_FAILED', message: err.message });
+        socket.emit("game:error", {
+          code: "TRUMP_FAILED",
+          message: err.message,
+        });
       }
     });
 
     // ── Draw card (Rummy) ──
-    socket.on('game:draw_card', async (data) => {
+    socket.on("game:draw_card", async (data) => {
       try {
         const { gameId, source } = data;
         const seat = await gameService.getSeatForSocket(gameId, socket.id);
         if (seat === undefined) {
-          socket.emit('game:error', { code: 'NOT_IN_GAME', message: 'You are not in this game' });
+          socket.emit("game:error", {
+            code: "NOT_IN_GAME",
+            message: "You are not in this game",
+          });
           return;
         }
 
         await gameService.rummyDraw(gameId, seat, source);
         await broadcastStates(io, gameService, gameId);
       } catch (err: any) {
-        socket.emit('game:error', { code: 'DRAW_FAILED', message: err.message });
+        socket.emit("game:error", {
+          code: "DRAW_FAILED",
+          message: err.message,
+        });
       }
     });
 
     // ── Lay meld (Rummy) ──
-    socket.on('game:lay_meld', async (data) => {
+    socket.on("game:lay_meld", async (data) => {
       try {
         const { gameId, cards } = data;
         const seat = await gameService.getSeatForSocket(gameId, socket.id);
         if (seat === undefined) {
-          socket.emit('game:error', { code: 'NOT_IN_GAME', message: 'You are not in this game' });
+          socket.emit("game:error", {
+            code: "NOT_IN_GAME",
+            message: "You are not in this game",
+          });
           return;
         }
 
@@ -733,7 +955,8 @@ export function setupGameHandlers(
           if (room) {
             const state = room.engine.getState();
             const winner = room.engine.getWinnerSeat();
-            io.to(gameId).emit('game:over', {
+            io.to(gameId).emit("game:over", {
+              gameId,
               finalScores: state.scores,
               winnerSeat: winner,
             });
@@ -747,17 +970,23 @@ export function setupGameHandlers(
           await broadcastStates(io, gameService, gameId);
         }
       } catch (err: any) {
-        socket.emit('game:error', { code: 'MELD_FAILED', message: err.message });
+        socket.emit("game:error", {
+          code: "MELD_FAILED",
+          message: err.message,
+        });
       }
     });
 
     // ── Discard (Rummy) ──
-    socket.on('game:discard', async (data) => {
+    socket.on("game:discard", async (data) => {
       try {
         const { gameId, card } = data;
         const seat = await gameService.getSeatForSocket(gameId, socket.id);
         if (seat === undefined) {
-          socket.emit('game:error', { code: 'NOT_IN_GAME', message: 'You are not in this game' });
+          socket.emit("game:error", {
+            code: "NOT_IN_GAME",
+            message: "You are not in this game",
+          });
           return;
         }
 
@@ -771,7 +1000,8 @@ export function setupGameHandlers(
           if (room) {
             const state = room.engine.getState();
             const winner = room.engine.getWinnerSeat();
-            io.to(gameId).emit('game:over', {
+            io.to(gameId).emit("game:over", {
+              gameId,
               finalScores: state.scores,
               winnerSeat: winner,
             });
@@ -791,7 +1021,8 @@ export function setupGameHandlers(
             if (room) {
               const state = room.engine.getState();
               const winner = room.engine.getWinnerSeat();
-              io.to(gameId).emit('game:over', {
+              io.to(gameId).emit("game:over", {
+                gameId,
                 finalScores: state.scores,
                 winnerSeat: winner,
               });
@@ -799,33 +1030,39 @@ export function setupGameHandlers(
           }
         }
       } catch (err: any) {
-        socket.emit('game:error', { code: 'DISCARD_FAILED', message: err.message });
+        socket.emit("game:error", {
+          code: "DISCARD_FAILED",
+          message: err.message,
+        });
       }
     });
 
     // ── In-game chat ──
-    socket.on('chat:message', async (data) => {
+    socket.on("chat:message", async (data) => {
       const { gameId, text } = data;
       const seat = await gameService.getSeatForSocket(gameId, socket.id);
       if (seat === undefined) return;
 
-      io.to(gameId).emit('chat:message', {
+      io.to(gameId).emit("chat:message", {
         seatIndex: seat,
         displayName,
-        text,
+        text: typeof text === "string" ? text.trim().slice(0, 500) : "",
         timestamp: Date.now(),
       });
     });
 
     // ── Disconnect ──
-    socket.on('disconnect', async () => {
+    socket.on("disconnect", async () => {
       console.log(`Client disconnected: ${socket.id}`);
 
       // Clean up presence
       if (userId) {
         const disconnectedUser = await presenceService.setOffline(socket.id);
         if (disconnectedUser) {
-          io.emit('presence:update', { userId: disconnectedUser, online: false });
+          io.emit("presence:update", {
+            userId: disconnectedUser,
+            online: false,
+          });
         }
       }
 
@@ -838,7 +1075,7 @@ export function setupGameHandlers(
         const { gameId, seat } = gameInfo;
         gameService.handlePlayerDisconnect(gameId, socket.id);
 
-        io.to(gameId).emit('game:player_disconnected', {
+        io.to(gameId).emit("game:player_disconnected", {
           seatIndex: seat,
           timeoutSeconds: 30,
         });
@@ -846,36 +1083,48 @@ export function setupGameHandlers(
         startDisconnectTimer(io, gameService, gameId, seat);
       }
 
-      // Clean up waiting rooms
-      for (const [roomId, room] of waitingRooms) {
-        const idx = room.players.findIndex((p) => p.socketId === socket.id);
-        if (idx !== -1) {
-          room.players.splice(idx, 1);
-          if (room.players.length === 0) {
-            waitingRooms.delete(roomId);
-          } else {
-            if (room.hostSocketId === socket.id) {
-              room.hostSocketId = room.players[0].socketId;
-              room.hostDisplayName = room.players[0].displayName;
+      const roomId = socket.data.waitingRoomId;
+      if (roomId)
+        await rooms.queue
+          .run(roomId, async () => {
+            const room = await rooms.load(roomId);
+            const player = room?.players.find((p) => p.socketId === socket.id);
+            if (room && player && !room.gameId) {
+              player.connected = false;
+              player.disconnectedAt = Date.now();
+              await rooms.save(room);
+              broadcastRoomState(io, room);
+              const expiry = setTimeout(() => {
+                void rooms.queue
+                  .run(roomId, async () => {
+                    const latest = await loadRoom(roomId);
+                    if (latest && !latest.gameId) {
+                      await rooms.save(latest);
+                      broadcastRoomState(io, latest);
+                    }
+                  })
+                  .catch(console.error);
+              }, 90_010);
+              expiry.unref();
             }
-            broadcastRoomState(io, room);
-          }
-        }
-      }
+          })
+          .catch(console.error);
     });
   });
 }
 
-function toRoomState(room: WaitingRoom, socketId: string): WaitingRoomState {
+function toRoomState(room: FamilyRoom, socketId: string): WaitingRoomState {
   return {
     roomId: room.id,
     gameType: room.gameType,
-    host: room.hostDisplayName,
+    host: room.players.find((p) => p.id === room.hostId)?.displayName ?? "Host",
     mySeat: room.players.findIndex((player) => player.socketId === socketId),
     players: room.players.map((p, i) => ({
       displayName: p.displayName,
       avatarUrl: null,
-      isHost: p.socketId === room.hostSocketId,
+      isHost: p.id === room.hostId,
+      connected: p.connected,
+      ready: p.ready === true,
       seatIndex: i,
     })),
     maxPlayers: room.maxPlayers,
@@ -884,9 +1133,12 @@ function toRoomState(room: WaitingRoom, socketId: string): WaitingRoomState {
   };
 }
 
-function broadcastRoomState(io: GameServer, room: WaitingRoom): void {
+function broadcastRoomState(io: GameServer, room: FamilyRoom): void {
   for (const player of room.players) {
-    io.to(player.socketId).emit('room:update', toRoomState(room, player.socketId));
+    io.to(player.socketId).emit(
+      "room:update",
+      toRoomState(room, player.socketId),
+    );
   }
 }
 
@@ -915,7 +1167,7 @@ function startDisconnectTimer(
 
     // Notify remaining players — they can choose to continue or quit
     // For now, we emit a special event. The client shows a modal.
-    io.to(gameId).emit('game:player_disconnected', {
+    io.to(gameId).emit("game:player_disconnected", {
       seatIndex: seat,
       timeoutSeconds: 0, // 0 = timer expired
     });
@@ -929,24 +1181,22 @@ async function handleAITurns(
   gameService: GameService,
   gameId: string,
 ): Promise<void> {
-  await gameService.executeAITurns(gameId, (seatIndex, card) => {
-    // Broadcast each AI card play — use sync room access since we're in-callback
-    const room = gameService.getRoomSync(gameId);
-    if (!room) return;
-    const state = room.engine.getState();
-
-    io.to(gameId).emit('game:card_played', {
-      seatIndex,
-      card,
-      nextSeat: state.currentPlayerSeat,
-    });
-
-    // Send updated visible state to each human player
-    for (const [seat, socketId] of room.playerSockets) {
-      const visibleState = room.engine.getVisibleState(seat);
-      io.to(socketId).emit('game:state', visibleState);
-    }
-  });
+  await gameService.executeAITurns(
+    gameId,
+    async (seatIndex, card) => {
+      const room = gameService.getRoomSync(gameId);
+      if (!room) return;
+      io.to(gameId).emit("game:card_played", {
+        seatIndex,
+        card,
+        nextSeat: room.engine.getState().currentPlayerSeat,
+      });
+      if (room.trickReview && room.trickReview.until > Date.now())
+        io.to(gameId).emit("game:trick_complete", room.trickReview.trick);
+      await broadcastStates(io, gameService, gameId);
+    },
+    () => broadcastStates(io, gameService, gameId),
+  );
 
   const room = await gameService.getRoom(gameId);
   if (!room) return;
@@ -954,19 +1204,7 @@ async function handleAITurns(
   const state = room.engine.getState();
 
   if (state.phase === GamePhase.GameOver) {
-    const winner = room.engine.getWinnerSeat();
-    const ratingChanges = await persistenceService.saveCompletedGame(gameId, room, winner);
-    io.to(gameId).emit('game:over', {
-      finalScores: state.scores,
-      winnerSeat: winner,
-      ratingChanges: ratingChanges.map((r) => ({
-        userId: r.userId,
-        gameType: state.gameType as any,
-        before: r.before,
-        after: r.after,
-        change: r.change,
-      })),
-    });
+    await finalizeGame(io, gameService, gameId);
     return;
   }
 
@@ -983,6 +1221,33 @@ async function broadcastStates(
 
   for (const [seat, socketId] of room.playerSockets) {
     const state = await gameService.getVisibleState(gameId, seat);
-    io.to(socketId).emit('game:state', state);
+    io.to(socketId).emit("game:state", state);
   }
+}
+
+async function finalizeGame(
+  io: GameServer,
+  service: GameService,
+  gameId: string,
+) {
+  const room = await service.getRoom(gameId);
+  if (!room) return;
+  await broadcastStates(io, service, gameId);
+  let saved = false;
+  try {
+    await persistenceService.saveCompletedGame(
+      gameId,
+      room,
+      room.engine.getWinnerSeat(),
+    );
+    saved = true;
+  } catch (error) {
+    console.error("Result save failed; reconnect can retry", gameId, error);
+  }
+  io.to(gameId).emit("game:over", {
+    gameId,
+    finalScores: room.engine.getState().scores,
+    winnerSeat: room.engine.getWinnerSeat(),
+    saved,
+  });
 }

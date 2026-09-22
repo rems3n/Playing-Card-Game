@@ -18,6 +18,12 @@ export abstract class GameEngine {
   protected events: GameEvent[] = [];
   protected stateMachine: StateMachine;
   private sequenceCounter = 0;
+  private pauseBetweenRounds = false;
+
+  /** The table service controls when players are ready for another deal. */
+  setRoundPause(enabled: boolean): void {
+    this.pauseBetweenRounds = enabled;
+  }
 
   constructor(gameId: string, config: GameConfig) {
     this.state = this.createInitialState(gameId, config);
@@ -116,16 +122,19 @@ export abstract class GameEngine {
       this.addEvent(GameEventType.GameEnded, this.getWinnerSeat(), {
         finalScores: [...this.state.scores],
       });
-    } else {
-      // Start a new round
-      this.state.roundNumber++;
-      this.state.trickNumber = 0;
-      this.state.currentTrick = [];
-      for (const p of this.state.players) {
-        p.tricksWon = 0;
-      }
-      this.deal();
+    } else if (!this.pauseBetweenRounds) {
+      this.startNextRound();
     }
+  }
+
+  startNextRound(): void {
+    if (this.state.phase !== GamePhase.RoundScoring)
+      throw new Error('The hand is not ready for another deal');
+    this.state.roundNumber++;
+    this.state.trickNumber = 0;
+    this.state.currentTrick = [];
+    for (const p of this.state.players) p.tricksWon = 0;
+    this.deal();
   }
 
   protected advanceToNextPlayer(): void {

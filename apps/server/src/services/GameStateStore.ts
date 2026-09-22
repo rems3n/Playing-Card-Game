@@ -1,27 +1,47 @@
-import { redis } from '../config/redis.js';
-import { GameType, AIDifficulty } from '@card-game/shared-types';
+import { redis } from "../config/redis.js";
+import {
+  GameType,
+  AIDifficulty,
+  type CompletedTrick,
+  type VisibleGameState,
+} from "@card-game/shared-types";
 
-const PREFIX = 'game';
+const PREFIX = "game";
 const TTL = 3600 * 4; // 4 hours — games expire after this
 
 /** Serialized game data stored in Redis. */
+export interface TrickReview {
+  until: number;
+  trick: CompletedTrick;
+  // Each entry is already filtered for that seat; never broadcast the entire array.
+  views: VisibleGameState[];
+}
+
 export interface SerializedGame {
+  autoDeal?: boolean;
+  trickReview?: TrickReview;
+  participants?: Array<[number, string]>;
   gameId: string;
   gameType: GameType;
   engineData: Record<string, unknown>;
-  aiSeats: Array<{ seat: number; difficulty: AIDifficulty; displayName: string }>;
-  playerMappings: Array<{ seat: number; socketId: string; userId: string | null; displayName: string }>;
+  aiSeats: Array<{
+    seat: number;
+    difficulty: AIDifficulty;
+    displayName: string;
+  }>;
+  playerMappings: Array<{
+    seat: number;
+    socketId: string;
+    userId: string | null;
+    displayName: string;
+    participantId?: string;
+  }>;
 }
 
 export class GameStateStore {
   /** Save a game to Redis. */
   async save(gameId: string, data: SerializedGame): Promise<void> {
-    await redis.set(
-      `${PREFIX}:${gameId}`,
-      JSON.stringify(data),
-      'EX',
-      TTL,
-    );
+    await redis.set(`${PREFIX}:${gameId}`, JSON.stringify(data), "EX", TTL);
     // Also track active game IDs
     await redis.sadd(`${PREFIX}:active`, gameId);
   }
