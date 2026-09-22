@@ -277,6 +277,8 @@ for (const size of sizes) {
     // then, so that a table without a call costs no height.
     await page.getByRole("button", { name: /Table menu/i }).click();
     await page.waitForTimeout(400);
+    // The entry only exists where a media provider is configured; without one
+    // there is nothing to open and nothing should offer to.
     const callEntry = page.getByRole("button", { name: /^(Call|Show call)$/ });
     if (await callEntry.count()) {
       await callEntry.first().click();

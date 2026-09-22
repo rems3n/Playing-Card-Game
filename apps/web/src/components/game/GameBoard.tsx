@@ -620,9 +620,11 @@ familyGame && !done && (
           {scorePanel}
           {autoDealControl}
           <div className="table-menu-actions">
-            <button className="button secondary" onClick={() => { setMenuOpen(false); setCallOpen(true); }}>
-              {media.status === "connected" ? "Show call" : "Call"}
-            </button>
+            {mediaConfig?.enabled && (
+              <button className="button secondary" onClick={() => { setMenuOpen(false); setCallOpen(true); }}>
+                {media.status === "connected" ? "Show call" : "Call"}
+              </button>
+            )}
             <button className="button secondary" onClick={() => { setMenuOpen(false); setRules(true); }}>Rules</button>
             <button className="button secondary" onClick={() => { setMenuOpen(false); setLeave(true); }}>Leave table</button>
           </div>

@@ -56,6 +56,16 @@ row before it is played, so a mis-tap is visible and recoverable.
 `MIN_HAND_CARD` defaults to 42 for this reason; raise it if the hand layout
 changes.
 
+## `lobby-flows.mjs` — the waiting room, two real browsers
+
+`npm run qa:lobby` opens a host on a desktop viewport and a guest on a phone and
+drives: nobody starts ready, Start stays disabled until everyone is, the note
+names who is still deciding, un-readying blocks it again, the invite panel says
+which app it will open and keeps full touch targets, freeing a seat tells the
+person why, a rejoin and a refresh keep the right state, and the host can start
+with both players landing at the table. Same setup as the layout suite; run it
+against a production build for a result worth quoting.
+
 ## `../public/qa/mobile.html` — manual, in-browser
 
 Loads the running app in a phone-sized iframe and reports the same layout

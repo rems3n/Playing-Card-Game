@@ -1,5 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen, within, fireEvent } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import {
   GamePhase,
   GameType,
@@ -29,6 +37,15 @@ vi.mock("../components/ConnectionProvider", () => ({
 }));
 vi.mock("../components/game/ChatPanel", () => ({ ChatPanel: () => null }));
 vi.mock("../components/game/RummyBoard", () => ({ RummyBoard: () => null }));
+// The table asks the server whether calls exist; in tests they do not.
+const mediaEnabled = vi.hoisted(() => ({ value: false }));
+vi.mock("@/hooks/useMedia", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/useMedia")>()),
+  useMediaConfig: () => ({
+    enabled: mediaEnabled.value,
+    provider: mediaEnabled.value ? "test" : "none",
+  }),
+}));
 const card = { rank: 14, suit: Suit.Spades };
 function initial(): VisibleGameState {
   return {
@@ -196,5 +213,23 @@ describe("compact table menu", () => {
     expect(transport.emit).toHaveBeenLastCalledWith("game:set_auto_deal", { gameId: "test-game", enabled: true });
     fireEvent.click(within(dialog).getByRole("button", { name: "Back to game" }));
     expect(screen.queryByRole("dialog", { name: /^Table$/ })).toBeNull();
+  });
+  it("offers a call from the table menu only where the server has one", async () => {
+    const user = userEvent.setup();
+    mediaEnabled.value = false;
+    render(<GameBoard />);
+    await user.click(screen.getByRole("button", { name: /Table menu/i }));
+    expect(screen.queryByRole("button", { name: /^Call$/ })).toBeNull();
+    expect(screen.queryByLabelText("Table call")).toBeNull();
+
+    cleanup();
+    mediaEnabled.value = true;
+    render(<GameBoard />);
+    await user.click(screen.getByRole("button", { name: /Table menu/i }));
+    // Scoped to the menu: the panel's own toggle is also called Call.
+    const menu = screen.getByRole("dialog");
+    expect(within(menu).getByRole("button", { name: /^Call$/ })).toBeTruthy();
+    expect(screen.getByLabelText("Table call")).toBeTruthy();
+    mediaEnabled.value = false;
   });
 });
