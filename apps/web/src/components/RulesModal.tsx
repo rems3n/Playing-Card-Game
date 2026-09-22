@@ -97,9 +97,9 @@ const SPADES_RULES = {
 };
 
 const EUCHRE_RULES = {
-  title: "Euchre",
+  title: "45s / Euchre",
   overview:
-    "A fast-paced partnership trick-taking game with a small deck. The team that calls trump must win at least 3 of 5 tricks to score.",
+    "This table plays Euchre: a partnership trick-taking game with a 24-card deck, where the team that calls trump must win at least 3 of 5 tricks to score. Forty-Fives is a different game and is not implemented yet — see the last section.",
   players: "4 players (2 teams of 2, partners sit across)",
   deck: "24 cards: 9, 10, J, Q, K, A in each suit",
   goal: "First team to reach 10 points wins.",
@@ -137,8 +137,20 @@ const EUCHRE_RULES = {
       items: [
         "Calling team wins 3–4 tricks = 1 point.",
         "Calling team wins all 5 tricks (march) = 2 points.",
+        "Calling team goes alone and wins all 5 = 4 points.",
         "Defending team wins 3+ tricks (euchre) = 2 points to defenders.",
         "First team to 10 points wins.",
+      ],
+    },
+    {
+      heading: "How Forty-Fives differs",
+      items: [
+        "45s uses all 52 cards, not 24.",
+        "The 5 of trump is the highest card, then the jack of trump, then the ace of hearts — which is trump whatever the trump suit is.",
+        "Other cards rank highest in red suits and lowest in black, so the 2 of clubs beats the 10 of clubs.",
+        "Each trick is worth 5 points, plus 5 for the highest trump played, and the game is to 45.",
+        "Holding one of the top three trumps lets you decline to follow a lower trump.",
+        "This table does none of that: it plays Euchre as described above.",
       ],
     },
   ],

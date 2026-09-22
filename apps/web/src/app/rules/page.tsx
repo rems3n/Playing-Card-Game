@@ -7,7 +7,7 @@ const GAMES = [
   {
     type: "euchre" as const,
     title: "45s / Euchre",
-    tagline: "Play with a partner and choose your trump",
+    tagline: "Partners, five tricks a hand, and a trump you call",
     players: "4 players",
     difficulty: "Partnership game",
     color: "var(--accent-green)",
@@ -18,7 +18,7 @@ const GAMES = [
   {
     type: "seven-six" as const,
     title: "Seven-Six",
-    tagline: "Bid smart, hit your number, climb the ranks",
+    tagline: "Bid the tricks you expect, then take exactly that many",
     players: "2-7 players",
     difficulty: "Easy to learn",
     color: "var(--accent-gold)",

@@ -93,6 +93,17 @@ fails if it covers the hand, the bid tiles or the round-end action. No call has
 been placed against a real SFU from this repository: that needs LiveKit
 credentials and is part of the outstanding device acceptance.
 
+## 45s and Euchre
+
+The game labelled "45s / Euchre" plays Euchre. `EuchreMoves.test.ts` pins that
+behaviour — the 24-card deck, the bowers, following the effective lead suit,
+the refusals, trick winners, trump calling including stick-the-dealer, going
+alone, and the 1/2/2/4 scoring to 10. [FORTY-FIVES.md](FORTY-FIVES.md) records
+how Forty-Fives actually differs: a 52-card deck, the 5 of trump and the ace of
+hearts above the jack, ranking that reverses in black suits, 5 points a trick
+with a highest-trump bonus, a target of 45, and reneging. The rules screen now
+says which of the two the table is playing.
+
 ## Remaining release work identified by review
 
 1. Full touch-device acceptance on iOS Safari and Android Chrome, including small
