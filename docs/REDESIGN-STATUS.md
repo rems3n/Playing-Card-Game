@@ -80,7 +80,7 @@ required. Do not infer visual QA from a successful Next.js build.
    Google sign-in before treating account support as released.
 2. Test two independent browser profiles through create → join → start → complete →
    history; refresh both lobby and active table; interrupt Wi-Fi; restart the server.
-   Repeat with 2 and 7 Seven-Six seats and 4 Euchre seats including a partial bot table.
+   Repeat with 2 and 7 Seven-Six seats and 2, 4 and 6 45s seats including a partial bot table.
 3. Inspect 360/390/768/1440-pixel layouts, keyboard focus, portrait/landscape, long
    player names, card readability, and touch controls on actual iOS/Android browsers.
 4. Complete-trick presentation now covers humans and bots with winner highlighting

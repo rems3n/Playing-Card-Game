@@ -4,18 +4,18 @@ Chess.com-inspired web and mobile platform for playing card games online.
 
 **Live at: [cardarena.vercel.app](https://cardarena.vercel.app)**
 
-Redevelopment is underway for **7/6 and 45s / Euchre**, using the existing Euchre
-rules as the baseline. The new hosting target is Railway for both web and server;
-the live website has not been migrated. See the [redevelopment backlog](docs/REDEVELOPMENT.md),
-the [Railway deployment guide](docs/RAILWAY.md), the [QA and defect review](docs/FAMILY-GAME-QA.md)
+Redevelopment is underway for **7/6 and 45s**. The new hosting target is Railway
+for both web and server; the live website has not been migrated. See the
+[redevelopment backlog](docs/REDEVELOPMENT.md), the
+[Railway deployment guide](docs/RAILWAY.md), the [QA and defect review](docs/FAMILY-GAME-QA.md)
 the [live audio and video notes](docs/MEDIA.md), the
 [invitation notes](docs/INVITES.md) and the
-[45s versus Euchre audit](docs/FORTY-FIVES.md). Identity, reconnects, durable rooms,
+[45s rules and ranking](docs/FORTY-FIVES.md). Identity, reconnects, durable rooms,
 score storage, and the responsive redesign remain release blockers.
 
 ## Existing features (being rebuilt)
 
-- **Family Games** — Seven-Six and 45s / Euchre are selectable; Hearts, Spades, and Rummy engines are also present
+- **Family Games** — Seven-Six and Auction 45s are selectable; Hearts, Spades, and Rummy engines are also present
 - **AI Opponents** — Beginner and Casual in the web selector; stronger calibrated levels are future work
 - **Google Sign-In** — OAuth authentication with editable profiles (username, avatar, display name)
 - **Glicko-2 Ratings** — Per-game-type ratings with pairwise decomposition for multiplayer
@@ -51,7 +51,7 @@ packages/
   shared-types/      TypeScript interfaces (Card, GameState, socket events)
   shared-socket/     Platform-agnostic Socket.io client
   shared-store/      Zustand stores (game, lobby, settings)
-  game-engine/       Game logic (Hearts, Spades, Euchre engines + StateMachine)
+  game-engine/       Game logic (Seven-Six, Forty-Fives, Hearts, Spades engines + StateMachine)
   ai/                AI strategies (Random, Heuristic, MonteCarlo)
 apps/
   server/            Fastify + Socket.io game server

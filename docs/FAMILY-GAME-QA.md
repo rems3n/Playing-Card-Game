@@ -1,8 +1,8 @@
 # Family-game QA and defect review
 
-Scope: the supported family web flows, Seven-Six (2–7 players), and the existing
-Euchre implementation labeled 45s / Euchre. Native app release certification,
-legacy Hearts/Spades/Rummy screens, and stronger AI are separate workstreams.
+Scope: the supported family web flows, Seven-Six (2–7 players), and Auction 45s
+(2, 4 or 6 players). Native app release certification, legacy Hearts/Spades/Rummy
+screens, and stronger AI are separate workstreams.
 
 ## Phone-viewport pass (Chromium at real viewports, driving the running app)
 
@@ -39,17 +39,17 @@ row, so a mis-tap is visible and recoverable.
 | Table cards become square; suit is off center | A 72px flex basis acts on height inside a column; fixed suit offsets | Non-shrinking, explicit portrait dimensions and 50% centering. Live desktop DOM measurements confirmed 72 × 104px cards with centered suits. |
 | Last trick dialog overflows its container | Content width exceeded the native dialog width | Fit the content to its dialog, with a scroll limit for short screens. |
 | Number by player disagrees with trick column | It was cumulative score without a label | Each player shows labeled tricks and points, including on small screens. Tests compare rendered counters. |
-| Euchre displays -1 | Internal pass sentinel is rendered directly | Display Pass. |
+| A pass displays as -1 | Internal pass sentinel is rendered directly | Display Pass. |
 | A malformed bid silently becomes zero | Socket handler coerced a non-number to 0 | Reject non-integer/non-number submissions; engine validates bounds and dealer restriction. |
 | Intermediate bot bids arrive together | AI scheduler only broadcast card plays | Persist and broadcast each bid/trump decision. |
 
 ## Automated acceptance coverage
 
-- **160 seeded complete engine games:** 120 Seven-Six games (20 for each of 2–7
-  seats), plus 40 Euchre games. Independently calculate each trick winner and
-  round score, including bowers; reject illegal/out-of-turn moves without
-  mutation; verify hidden hands, unique event sequence numbers, final completion,
-  and repeated serialize/restore equivalence.
+- **Seeded complete engine games:** 120 Seven-Six games (20 for each of 2–7
+  seats), plus seeded 45s games at 2, 4 and 6 seats. Independently calculate each
+  trick winner and round score from transcribed ranking tables; reject
+  illegal/out-of-turn moves without mutation; verify hidden hands, unique event
+  sequence numbers, final completion, and repeated serialize/restore equivalence.
 - **Presentation integration:** complete human-driven and all-bot games in both
   engines. Check all cards remain in the review state, the final card is present,
   tricks update before the hold, no early move is accepted, old-round hand/trump
@@ -60,7 +60,7 @@ row, so a mis-tap is visible and recoverable.
   Storage is isolated in memory in this transport suite.
 - **UI interaction tests:** number/keyboard bidding, duplicate-submit
   prevention, selection-then-play, winner and counters, Last trick after a new
-  round, Euchre pass labels, and ignoring another game's delayed state.
+  round, 45s pass labels, and ignoring another game's delayed state.
 - **Existing room/auth/AI coverage:** duplicate starts, failed starts and retry,
   stable identities, host transfer, signed-session validation, and AI strategies.
 - **Real Postgres/Redis CI suite:** migrated disposable services; failed-result
@@ -93,16 +93,21 @@ fails if it covers the hand, the bid tiles or the round-end action. No call has
 been placed against a real SFU from this repository: that needs LiveKit
 credentials and is part of the outstanding device acceptance.
 
-## 45s and Euchre
+## 45s
 
-The game labelled "45s / Euchre" plays Euchre. `EuchreMoves.test.ts` pins that
-behaviour — the 24-card deck, the bowers, following the effective lead suit,
-the refusals, trick winners, trump calling including stick-the-dealer, going
-alone, and the 1/2/2/4 scoring to 10. [FORTY-FIVES.md](FORTY-FIVES.md) records
-how Forty-Fives actually differs: a 52-card deck, the 5 of trump and the ace of
-hearts above the jack, ranking that reverses in black suits, 5 points a trick
-with a highest-trump bonus, a target of 45, and reneging. The rules screen now
-says which of the two the table is playing.
+The table labelled 45s plays **Auction Forty-Fives**: a 52-card deck, five cards
+each, bidding 15/20/25/30, the 5 of trump and the ace of hearts above the jack,
+ranking that reverses in black suits, 5 points a trick with a highest-trump
+bonus, bid-or-lose scoring to 45, and reneging of the top three trumps.
+[FORTY-FIVES.md](FORTY-FIVES.md) records the ranking in full and names the
+variant rules that are deliberately not implemented. The Euchre engine it
+replaced has been removed along with its tests, its AI and its 24-card deck.
+
+Rules coverage: `FortyFivesRules.test.ts` (32 tests) checks the ranking against
+tables transcribed independently from the rules, the auction including the
+dealer's hold and the stuck dealer, six reneging cases, and the scoring;
+`FortyFivesSimulation.test.ts` (60 tests) plays seeded complete games at every
+supported seat count.
 
 ## Remaining release work identified by review
 
@@ -140,5 +145,5 @@ certification or claim that simulation covers every interface or failure mode.
   deals, outsider requests, retained scores, dealer rotation, delay cancellation,
   re-enabling, and manual dealing throughout complete socket-driven games.
 - Native compatibility controls are included; real-device acceptance is still open.
-- Existing Euchre pickup rules are unchanged: its ordered upcard can enter the
-  dealer's hand. The set-aside rule above applies to Seven-Six.
+- The set-aside trump card is a Seven-Six rule. 45s has no turned-up card: its
+  trump is named by whoever wins the auction.

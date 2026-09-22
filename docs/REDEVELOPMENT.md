@@ -2,10 +2,11 @@
 
 ## Decisions
 
-- **Games:** Seven-Six (7/6) and the existing Euchre implementation as the baseline
-  for the family's 45s. Preserve the stored `euchre` game key. The current selector
-  says **45s / Euchre** and explains which rules it uses. Do not substitute rules
-  from another variant or block development on further clarification.
+- **Games:** Seven-Six (7/6) and **Auction 45s** at 2, 4 or 6 seats, bidding
+  15/20/25/30. This supersedes the earlier decision to ship the Euchre engine as a
+  stand-in: that engine, its AI and its tests have been removed, and 45s is
+  implemented from the rules in [FORTY-FIVES.md](FORTY-FIVES.md). The game key is
+  `forty-fives`; the retired `euchre` key survives only in old stored records.
 - **Hosting:** Railway for web, game server, Postgres, and Redis. See [deployment
   instructions](RAILWAY.md). Start with one authoritative server replica.
 - **First audience:** invited family and friends, with basic solo bots. Ship a
@@ -22,9 +23,9 @@ The branch begins redevelopment and is **not a production-ready release**.
 
 | Area | Implemented here | Still required |
 | --- | --- | --- |
-| Euchre rules | Single trick counting; validated suit choices; stuck-dealer enforcement; legal-call projection; lone-hand completion/lead fixes | More deterministic scoring/left-bower fixtures; clarify current automatic dealer discard in onboarding; no new variant rules |
+| 45s rules | 52-card deal, colour-dependent ranking with the 5/jack/A♥ trumps, reneging, the auction with the dealer's hold and stuck dealer, bid-or-lose scoring to 45, at 2/4/6 seats | Bot bidding calibration; a per-hand scoring breakdown in the interface |
 | Seven-Six | Reject fractional/non-finite bids and unsupported player counts; full 13-round tests at 2, 4, and 7 seats | Public legal-bid projection; structured round results and score history |
-| Basic bots | One in-flight scheduler per game; continue across bidding/round boundaries; legal Euchre bidding; cancel stale delayed core actions | Atomic command processing, durable scheduler wake-up, browser recovery tests |
+| Basic bots | One in-flight scheduler per game; continue across bidding/round boundaries; legal 45s bidding and trump naming; cancel stale delayed core actions | Atomic command processing, durable scheduler wake-up, browser recovery tests |
 | Lobby | Personalized host identity; repeated full-room join works; start request deduplication and retry; listener cleanup no longer leaves the room during React effect cleanup | Stable guest identity, reconnect leases, persistent waiting rooms, atomic lifecycle |
 | Membership | Reject strangers entering active games; reject outsider end/replace commands; require a disconnected replacement target | Verified identities and per-command authorization across all endpoints |
 | Discovery | Both family games and their rules are reachable; expose Beginner/Casual bots only | New home, table, results, and navigation designs |
@@ -43,7 +44,7 @@ implementation work is M1. M0 establishes a usable test/build gate for that work
 
 ### M0 — Rules and delivery foundation (this branch)
 
-- [x] Apply the agreed Euchre baseline and expose both games.
+- [x] Expose both family games. (The Euchre stand-in was later replaced by 45s.)
 - [x] Fix confirmed trick counting and bidding defects.
 - [x] Test bot progression through complete games and concurrent requests.
 - [x] Fix immediate lobby host/join/start defects.
@@ -114,7 +115,7 @@ in one Postgres transaction with uniqueness on game/round/sequence as appropriat
 Make finalization idempotent and retryable; surface pending/retrying saves instead of
 swallowing a database failure. Persist abandoned games distinctly from completed ones.
 
-Fix Seven-Six placements as individual high-score results; Euchre uses team results.
+Fix Seven-Six placements as individual high-score results; 45s uses team results.
 Record ties explicitly. Preserve guest names in historical results without inventing
 account UUIDs. Build the recent-games page from real records. The first scoreboard
 shows family wins, games played, and per-game totals with understandable definitions.
@@ -123,7 +124,7 @@ identity and placement models are correct and rated play is explicitly selected.
 
 **Acceptance:** retrying completion ten times creates one result; a failed write
 leaves no partial result and can recover; a restart shows the same scorecard;
-Seven-Six ties and Euchre partnerships display correctly; abandoned games don't
+Seven-Six ties and 45s partnerships display correctly; abandoned games don't
 award a win; history is restricted to the intended viewers.
 
 ### M4 — Responsive redesign and teaching
@@ -139,7 +140,7 @@ Use the board as the visual focus and progressively reveal settings.
 | Create | Friendly defaults; names, seats/partners, rules summary; advanced options collapsed |
 | Room | Invite link/code, identifiable host, your seat, human/bot occupants, connection status, ready/start state, explicit Leave |
 | Table | Your hand anchored at the bottom; opponents around the table; persistent trump, bid, turn, and round labels; one primary action |
-| Scores | Per-round bid/tricks/points and running totals; team grouping for Euchre; drawer on phones, side panel on wide screens |
+| Scores | Per-round bid/tricks/points and running totals; team grouping for 45s; drawer on phones, side panel on wide screens |
 | Results | Winners/ties, why points were awarded, save state, **Rematch with this group**, **Back home** |
 | Rules | Concise overview plus examples; in-game help explains why a particular move is unavailable |
 
@@ -170,7 +171,7 @@ for stalled turns/save failures, and an administrator recovery path. Plan schema
 migrations and rollback before production. Configure Postgres backups and demonstrate
 a restore. Document Redis snapshot expiry and how interrupted games resume.
 
-Run browser tests with multiple isolated users for complete 7/6 and Euchre games,
+Run browser tests with multiple isolated users for complete 7/6 and 45s games,
 disconnect/reconnect, leave, restart, scoreboard, and rematch. Include iOS Safari and
 Android Chrome on actual devices. Define a target beta capacity (initially 10
 simultaneous private tables) and load-test that target with gameplay, not just sockets.
@@ -196,8 +197,10 @@ different performance; do not relabel identical strategies as advanced difficult
 
 ## Migration boundaries
 
-Preserve existing user and game records. Keep the `euchre` key and stored rules
-baseline stable. Introduce versioned snapshots and an explicit compatibility policy
+Preserve existing user and game records. Games stored under the retired `euchre`
+key are left as they are: the column is a varchar, so they load, and the history
+page shows the stored key rather than inventing a label for a game the app no
+longer plays. Introduce versioned snapshots and an explicit compatibility policy
 before changing identity or persistence formats. Schedule a clean table boundary
 for incompatible updates rather than trying to interpret old incomplete snapshots.
 Add schema before deploying readers/writers that depend on it; remove old paths in
