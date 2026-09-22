@@ -21,6 +21,7 @@ import { leaderboardRoutes } from "./routes/leaderboard.js";
 import { ratingHistoryRoutes } from "./routes/ratingHistory.js";
 import { authRoutes } from "./routes/auth.js";
 import { mediaRoutes } from "./routes/media.js";
+import { createMediaProvider } from "./services/media/index.js";
 
 async function main() {
   const fastify = Fastify({ logger: true });
@@ -83,6 +84,16 @@ async function main() {
   setupGameHandlers(io, gameService);
 
   console.log(`Game server running on port ${env.SERVER_PORT}`);
+  // Which optional subsystems are actually on. Without this, "the call button
+  // is missing" cannot be told apart from "the provider was never configured"
+  // without reading the variables, which is exactly when you cannot.
+  console.log(
+    `Media: ${
+      createMediaProvider(env).enabled
+        ? `on (${env.MEDIA_PROVIDER}, ${env.LIVEKIT_URL.split("://")[0]}://)`
+        : `off (MEDIA_PROVIDER=${env.MEDIA_PROVIDER})`
+    }`,
+  );
 }
 
 main().catch((err) => {
