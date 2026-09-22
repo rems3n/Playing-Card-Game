@@ -7,6 +7,7 @@ import type { GameType, VisibleGameState } from "@card-game/shared-types";
 import { GameService } from "../services/GameService.js";
 import { RoomService } from "../services/RoomService.js";
 import { setupGameHandlers } from "../socket/gameRoom.js";
+import type { MediaService } from "../services/MediaService.js";
 import { issueSession, socketAuth } from "../middleware/auth.js";
 
 /** Resolve on the next occurrence of `name`, or reject after `ms`. */
@@ -66,7 +67,17 @@ export interface Table {
  */
 export async function openTable(
   gameType: GameType,
-  { seats = 4, humans = 2, targetScore = 0 } = {},
+  {
+    seats = 4,
+    humans = 2,
+    targetScore = 0,
+    media,
+  }: {
+    seats?: number;
+    humans?: number;
+    targetScore?: number;
+    media?: MediaService;
+  } = {},
 ): Promise<Table> {
   const http: HttpServer = createServer();
   const io = new Server(http);
@@ -92,7 +103,7 @@ export async function openTable(
     },
   } as any);
   io.use(socketAuth);
-  setupGameHandlers(io, service, rooms);
+  setupGameHandlers(io, service, rooms, media);
   await new Promise<void>((resolve) => http.listen(0, "127.0.0.1", resolve));
   const { port } = http.address() as { port: number };
 

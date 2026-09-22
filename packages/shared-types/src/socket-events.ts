@@ -6,6 +6,7 @@ import type {
   RatingChange,
   VisibleGameState,
 } from "./game.js";
+import type { MediaCredentials, MediaErrorCode } from "./media.js";
 
 // ── Waiting room types ──
 
@@ -48,6 +49,9 @@ export interface ClientToServerEvents {
   "game:discard": (data: { gameId: string; card: Card }) => void;
   "game:replace_with_ai": (data: { gameId: string; seatIndex: number }) => void;
   "game:end": (data: { gameId: string }) => void;
+
+  /** Ask for call credentials for a table this socket already holds a seat at. */
+  "media:token": (data: { gameId: string }) => void;
 
   "matchmaking:join": (data: {
     gameType: GameType;
@@ -159,4 +163,7 @@ export interface ServerToClientEvents {
   }) => void;
 
   "presence:update": (data: { userId: string; online: boolean }) => void;
+
+  "media:credentials": (credentials: MediaCredentials) => void;
+  "media:error": (data: { code: MediaErrorCode; message: string }) => void;
 }

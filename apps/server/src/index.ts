@@ -20,6 +20,7 @@ import { friendRoutes } from "./routes/friends.js";
 import { leaderboardRoutes } from "./routes/leaderboard.js";
 import { ratingHistoryRoutes } from "./routes/ratingHistory.js";
 import { authRoutes } from "./routes/auth.js";
+import { mediaRoutes } from "./routes/media.js";
 
 async function main() {
   const fastify = Fastify({ logger: true });
@@ -53,6 +54,7 @@ async function main() {
 
   // API routes
   await fastify.register(authRoutes);
+  await fastify.register(mediaRoutes);
   await fastify.register(userRoutes);
   await fastify.register(gameRoutes);
   await fastify.register(uploadRoutes);

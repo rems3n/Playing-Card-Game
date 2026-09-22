@@ -13,6 +13,12 @@ import { PersistenceService } from "../services/PersistenceService.js";
 import { RoomService, type FamilyRoom } from "../services/RoomService.js";
 import { PresenceService } from "../services/PresenceService.js";
 import { MatchmakingService } from "../services/MatchmakingService.js";
+import {
+  MediaAuthorizationError,
+  MediaService,
+} from "../services/MediaService.js";
+import { createMediaProvider } from "../services/media/index.js";
+import { env } from "../config/env.js";
 
 type GameSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 type GameServer = Server<ClientToServerEvents, ServerToClientEvents>;
@@ -20,6 +26,10 @@ type GameServer = Server<ClientToServerEvents, ServerToClientEvents>;
 const persistenceService = new PersistenceService();
 const presenceService = new PresenceService();
 const matchmakingService = new MatchmakingService();
+const defaultMediaService = new MediaService(
+  createMediaProvider(env),
+  env.MEDIA_TOKEN_TTL_SECONDS,
+);
 
 const PLAYERS_PER_GAME: Record<string, number> = {
   hearts: 4,
@@ -51,6 +61,7 @@ export function setupGameHandlers(
   io: GameServer,
   gameService: GameService,
   rooms = new RoomService(),
+  media: MediaService = defaultMediaService,
 ): void {
   io.on("connection", (socket: GameSocket) => {
     console.log(`Client connected: ${socket.id}`);
@@ -614,6 +625,33 @@ export function setupGameHandlers(
 
       // Start reconnect timer
       startDisconnectTimer(io, gameService, gameId, seat);
+    });
+
+    // ── Call credentials for this table ──
+    // The seat, name, room and permissions are all decided here. A failure
+    // returns an error the client can show beside the table; the card game is
+    // never interrupted by it.
+    socket.on("media:token", async (data) => {
+      try {
+        const credentials = await media.issueCredentials(
+          gameService,
+          data?.gameId,
+          participantId,
+        );
+        socket.emit("media:credentials", credentials);
+      } catch (err) {
+        const failure =
+          err instanceof MediaAuthorizationError
+            ? err
+            : new MediaAuthorizationError(
+                "MEDIA_TOKEN_FAILED",
+                "Could not start the call. The game is unaffected.",
+              );
+        socket.emit("media:error", {
+          code: failure.code,
+          message: failure.message,
+        });
+      }
     });
 
     // ── Play a card ──

@@ -18,26 +18,27 @@
     "db:migrate:production": "node dist/db/migrate.js"
   },
   "dependencies": {
-    "@card-game/shared-types": "*",
-    "@card-game/game-engine": "*",
     "@card-game/ai": "*",
-    "fastify": "^5.2.0",
+    "@card-game/game-engine": "*",
+    "@card-game/shared-types": "*",
     "@fastify/cors": "^11.0.0",
-    "socket.io": "^4.8.0",
-    "uuid": "^11.1.0",
-    "drizzle-orm": "^0.45.3",
-    "postgres": "^3.4.0",
-    "dotenv": "^16.4.0",
-    "jose": "^6.0.0",
     "@fastify/multipart": "^9.0.0",
     "@fastify/static": "^10.1.4",
-    "ioredis": "^5.6.0"
+    "dotenv": "^16.4.0",
+    "drizzle-orm": "^0.45.3",
+    "fastify": "^5.2.0",
+    "ioredis": "^5.6.0",
+    "jose": "^6.0.0",
+    "livekit-server-sdk": "^2.19.1",
+    "postgres": "^3.4.0",
+    "socket.io": "^4.8.0",
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
-    "typescript": "^5.7.0",
-    "tsx": "^4.19.0",
     "@types/uuid": "^10.0.0",
     "drizzle-kit": "^0.31.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
     "vitest": "^3.0.0"
   }
 }

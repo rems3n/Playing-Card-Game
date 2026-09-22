@@ -55,6 +55,8 @@ Set these in each Railway service. Values below are placeholders, not credential
 | Web     | `SERVER_INTERNAL_URL`                      | Optional private HTTP server origin for server-to-server session exchange. Otherwise the public server URL is used.                                                           |
 | Both    | `NODE_ENV`                                 | `production` (already set in the web runner image).                                                                                                                           |
 | Both    | `PORT`                                     | Railway supplies this. Both processes bind on `0.0.0.0` and honor it.                                                                                                         |
+| Server  | `MEDIA_PROVIDER`                           | Optional. `none` (default) or `livekit`. Live audio and video stay off until this is set. See [MEDIA.md](MEDIA.md).                                                           |
+| Server  | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | Required when `MEDIA_PROVIDER=livekit`. Runtime variables only; they never reach the browser.                                                                     |
 
 Keep secrets as runtime variables; do not put them into Docker build arguments.
 Only the public backend URL is intentionally baked into the browser bundle.
