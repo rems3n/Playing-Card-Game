@@ -10,11 +10,16 @@ Drives a complete Seven-Six hand at five phone viewports in Chromium with
 
 - horizontal or vertical page scrolling on the game page
 - tracked controls rendered outside the viewport
+- controls cut off by an ancestor that hides its overflow, which is how the
+  game shell keeps its height — a control can be inside the viewport and still
+  be clipped
 - overlapping hand cards
 - touch targets under 44px (hand cards are measured separately, see below)
-- flow breaks: Escape not closing a dialog, a lost scoring pause on reload,
-  auto-deal not toggling, "Deal next hand" not starting the next hand, or
-  leaving not returning to the games page
+- a call panel that covers the hand, the bid tiles or the round-end action,
+  where a media provider is configured
+- flow breaks: Escape not closing a dialog, a bid submitted before one is
+  chosen, a lost scoring pause on reload, auto-deal not toggling, "Deal next
+  hand" not starting the next hand, or leaving not returning to the games page
 
 Run it against a local stack:
 
@@ -26,6 +31,14 @@ cd apps/web && npm run dev
 # terminal 3
 cd apps/web && npm run qa:mobile
 ```
+
+Prefer a production build (`npm run build` then `npm run start` in `apps/web`,
+and `node dist/index.js` in `apps/server`) for a run you intend to quote: `next
+dev` reloads on every edit and draws a floating indicator in the bottom-left
+corner, and `tsx watch` restarts the game server, either of which will make a
+long run fail for reasons that have nothing to do with the layout. The suite
+hides the dev indicator, but it cannot hide a reload. Do not edit files while a
+run is in progress.
 
 Environment variables: `BASE_URL` (default `http://localhost:3000`), `SEATS`
 (default 7), `GAME` (`Seven-Six` or `45s / Euchre`), `SIZES` (comma-separated,
