@@ -110,19 +110,18 @@ export class HeuristicStrategy implements AIPlayer {
       return spadesBid(state.myHand);
     }
     if (state.gameType === GameType.SevenSix && state.trumpSuit) {
-      // Build legal bids list from state
-      const handSize = state.myHand.length;
-      const bids = state.bids ?? [];
-      const isDealer = state.dealerSeat === state.mySeat;
-      const legalBids: number[] = [];
-      const currentTotal = bids.filter((b): b is number => b !== null).reduce((s, b) => s + b, 0);
-      for (let b = 0; b <= handSize; b++) {
-        if (isDealer && currentTotal + b === handSize) continue;
-        legalBids.push(b);
-      }
+      // The engine says which bids are legal; it enforces the dealer's
+      // restriction, so it is the one place the list should come from.
+      const legalBids = state.legalBids?.length
+        ? state.legalBids
+        : Array.from({ length: state.myHand.length + 1 }, (_, b) => b);
       return sevenSixBid(state.myHand, state.trumpSuit, legalBids);
     }
     if (state.gameType === GameType.FortyFives) return fortyFivesBid(state);
     return Math.max(1, Math.min(Math.floor(state.myHand.length / 3), 5));
+  }
+
+  chooseTrump(state: VisibleGameState): Suit {
+    return fortyFivesTrump(state);
   }
 }

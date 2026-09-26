@@ -20,11 +20,8 @@ import {
 import {
   createAIPlayer,
   type AIPlayer,
-  fortyFivesBid,
-  fortyFivesTrump,
   findMelds,
   chooseDrawSource,
-  sevenSixBid,
 } from "@card-game/ai";
 import {
   GameStateStore,
@@ -750,10 +747,14 @@ export class GameService {
 
       while (ai && room.engine.getState().phase === GamePhase.Bidding) {
         const ssEngine = room.engine as SevenSixEngine;
-        const hand = ssEngine.getState().players[currentSeat].hand;
-        const trumpSuit = ssEngine.getState().trumpSuit!;
+        // The bot at this seat bids, at its own level: the difficulty a
+        // player chose used to reach the cards but never the bidding.
         const legalBids = ssEngine.getLegalBids(currentSeat);
-        const bid = sevenSixBid(hand, trumpSuit, legalBids);
+        const chosen = ai.chooseBid(ssEngine.getVisibleState(currentSeat));
+        const bid =
+          typeof chosen === "number" && legalBids.includes(chosen)
+            ? chosen
+            : legalBids[0];
         if (!(await this.pauseForAI(gameId, room, currentSeat, 500))) return;
         ssEngine.placeBid(currentSeat, bid);
         await this.persist(gameId);
@@ -781,11 +782,13 @@ export class GameService {
         const visible = engine.getVisibleState(currentSeat);
         if (!(await this.pauseForAI(gameId, room, currentSeat, 500))) return;
         if (engine.getLegalTrumpCalls(currentSeat).length) {
-          // This seat won the auction and now names trump.
-          engine.callTrump(currentSeat, fortyFivesTrump(visible));
+          // This seat won the auction and now names trump, at its own level.
+          engine.callTrump(currentSeat, ai.chooseTrump(visible));
         } else {
-          const bid = fortyFivesBid(visible);
-          engine.placeBid(currentSeat, typeof bid === "number" ? bid : -1);
+          const legal = engine.getLegalBids(currentSeat);
+          const chosen = ai.chooseBid(visible);
+          const bid = chosen === "pass" ? -1 : chosen;
+          engine.placeBid(currentSeat, legal.includes(bid) ? bid : legal[0]);
         }
         await this.persist(gameId);
         await onStateChanged?.();

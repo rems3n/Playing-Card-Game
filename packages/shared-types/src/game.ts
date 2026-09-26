@@ -123,6 +123,8 @@ export interface GameState {
   roundScores: number[]; // current round scores per seat
   trumpSuit?: Suit;
   bids?: (number | null)[]; // per seat, null = hasn't bid yet
+  /** Every card played this hand, in order. Public: everyone saw them go. */
+  playedCards?: PlayedCard[];
   // Rummy-specific
   drawPile?: Card[];
   discardPile?: Card[];
@@ -153,6 +155,8 @@ export interface VisibleGameState {
   roundScores: number[];
   trumpSuit?: Suit;
   bids?: (number | null)[];
+  /** Every card played this hand, in order. What a careful player remembers. */
+  playedCards?: PlayedCard[];
   myHand: Card[];
   mySeat: number;
   legalMoves: Card[];

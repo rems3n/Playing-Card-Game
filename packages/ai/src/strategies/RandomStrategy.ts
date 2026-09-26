@@ -1,5 +1,5 @@
 import type { Card, VisibleGameState } from '@card-game/shared-types';
-import { AIDifficulty } from '@card-game/shared-types';
+import { AIDifficulty, Suit } from '@card-game/shared-types';
 import type { AIPlayer } from '../AIPlayer.js';
 
 export class RandomStrategy implements AIPlayer {
@@ -29,8 +29,21 @@ export class RandomStrategy implements AIPlayer {
     return selected;
   }
 
-  chooseBid(_state: VisibleGameState): number {
-    // Random bid between 1 and 4
+  chooseBid(state: VisibleGameState): number | 'pass' {
+    // A beginner guesses, but only among the bids the table allows. In 45s
+    // that includes passing (-1), which a guess lands on as readily as a bid.
+    const legal = state.legalBids ?? [];
+    if (legal.length) {
+      const pick = legal[Math.floor(Math.random() * legal.length)];
+      return pick < 0 ? 'pass' : pick;
+    }
     return Math.floor(Math.random() * 4) + 1;
+  }
+
+  chooseTrump(state: VisibleGameState): Suit {
+    const suits = (state.legalTrumpCalls ?? []).filter(
+      (call): call is Suit => call !== 'pass',
+    );
+    return suits[Math.floor(Math.random() * suits.length)] ?? Suit.Hearts;
   }
 }

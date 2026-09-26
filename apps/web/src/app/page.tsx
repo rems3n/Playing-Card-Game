@@ -80,6 +80,8 @@ export default function Home() {
       const config = {
         maxPlayers: game === GameType.FortyFives ? fortyFivesSeats : count,
         targetScore: game === GameType.FortyFives ? 45 : 0,
+        // Bots take any seat nobody fills, in either mode, at this level.
+        aiDifficulty: difficulty,
       };
       if (mode === "friends")
         socket.emit("room:create", { gameType: game, config });
@@ -217,25 +219,26 @@ export default function Home() {
               </select>
             </label>
           </div>
-          {mode === "practice" && (
-            <label className="difficulty-field">
-              Bot difficulty
-              <select
-                value={difficulty}
-                onChange={(e) => setDifficulty(e.target.value as AIDifficulty)}
-              >
-                <option value={AIDifficulty.Beginner}>
-                  Beginner — learn the game
-                </option>
-                <option value={AIDifficulty.Intermediate}>
-                  Casual — basic strategy
-                </option>
-              </select>
-            </label>
-          )}
+          <label className="difficulty-field">
+            {mode === "practice" ? "Bot difficulty" : "Bots in empty seats"}
+            <select
+              value={difficulty}
+              onChange={(e) => setDifficulty(e.target.value as AIDifficulty)}
+            >
+              <option value={AIDifficulty.Beginner}>
+                Beginner — plays any legal card, bids at random
+              </option>
+              <option value={AIDifficulty.Intermediate}>
+                Medium — follows the standard lines, bids what it holds
+              </option>
+              <option value={AIDifficulty.Expert}>
+                Expert — counts cards and plays out each hand before choosing
+              </option>
+            </select>
+          </label>
           <p className="setup-note">
             {mode === "friends"
-              ? "Create a private table and share the invite. Bots can fill empty seats."
+              ? "Create a private table and share the invite. Bots at the level above fill any empty seats when the game starts."
               : "Play at your own pace with computer opponents."}{" "}
             {game === GameType.FortyFives &&
               "Four and six play in two teams, sitting alternately."}

@@ -412,6 +412,13 @@ export class SevenSixEngine extends GameEngine {
       dealerSeat: this.dealerSeat,
       handSize: this.getHandSize(),
       totalRounds: this.roundSequence.length,
+      // The engine is the one place the dealer's restriction is enforced, so
+      // it is also the one place the choices should come from.
+      legalBids:
+        this.state.phase === GamePhase.Bidding &&
+        seatIndex === this.state.currentPlayerSeat
+          ? this.getLegalBids(seatIndex)
+          : [],
     };
   }
 

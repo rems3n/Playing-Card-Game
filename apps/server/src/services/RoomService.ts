@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { redis } from "../config/redis.js";
-import { GameType, type GameConfig } from "@card-game/shared-types";
+import { AIDifficulty, GameType, type GameConfig } from "@card-game/shared-types";
 
 export interface RoomPlayer {
   id: string;
@@ -96,13 +96,17 @@ export class RoomService {
       (fortyFives && targetScore < 1)
     )
       throw new Error("Invalid target score");
+    // Empty seats are filled with bots at the level the host chose.
+    const aiDifficulty = config.aiDifficulty ?? AIDifficulty.Intermediate;
+    if (!Object.values(AIDifficulty).includes(aiDifficulty))
+      throw new Error("Invalid bot difficulty");
     const room: FamilyRoom = {
       id: randomBytes(4).toString("hex"),
       gameType,
       hostId: player.id,
       players: [player],
       maxPlayers,
-      config: { gameType, maxPlayers, targetScore },
+      config: { gameType, maxPlayers, targetScore, aiDifficulty },
     };
     await this.save(room);
     return room;

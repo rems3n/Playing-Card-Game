@@ -16,6 +16,10 @@ export default function WaitingRoom() {
   const { data: session } = useSession();
   const [name, setName] = useState("");
   const [room, setRoom] = useState<WaitingRoomState | null>(null);
+  const botLevel =
+    { beginner: "beginner", intermediate: "medium", advanced: "medium", expert: "expert" }[
+      room?.config?.aiDifficulty ?? "intermediate"
+    ] ?? "medium";
   const [error, setError] = useState("");
   const [starting, setStarting] = useState(false);
   const invites = useInviteConfig();
@@ -190,9 +194,9 @@ export default function WaitingRoom() {
           <p className="setup-note">
             {host
               ? notReady.length
-                ? `Waiting for ${notReady.map((p) => (p.seatIndex === room?.mySeat ? "you" : p.displayName)).join(" and ")}. At least two people are needed; bots fill any remaining seats.`
-                : "Everyone is ready. Bots fill any remaining seats."
-              : `${room?.host ?? "The host"} starts the game once everyone is ready.`}
+                ? `Waiting for ${notReady.map((p) => (p.seatIndex === room?.mySeat ? "you" : p.displayName)).join(" and ")}. At least two people are needed; ${botLevel} bots fill any remaining seats.`
+                : `Everyone is ready. ${botLevel[0].toUpperCase()}${botLevel.slice(1)} bots fill any remaining seats.`
+              : `${room?.host ?? "The host"} starts the game once everyone is ready. ${botLevel[0].toUpperCase()}${botLevel.slice(1)} bots fill any remaining seats.`}
           </p>
           <div className="waiting-actions">
             <button

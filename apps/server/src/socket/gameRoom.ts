@@ -547,7 +547,10 @@ export function setupGameHandlers(
               await io.sockets.sockets.get(player.socketId)?.join(gameId);
             }
             if (room.players.length < room.maxPlayers)
-              await gameService.fillWithAI(gameId, AIDifficulty.Intermediate);
+              await gameService.fillWithAI(
+                gameId,
+                room.config.aiDifficulty ?? AIDifficulty.Intermediate,
+              );
             await gameService.startGame(gameId);
             room.gameId = gameId;
             await rooms.save(room);

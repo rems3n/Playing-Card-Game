@@ -21,6 +21,7 @@ const BOT_PERSONALITIES: BotPersonality[] = [
 export function createAIPlayer(
   difficulty: AIDifficulty,
   nameOverride?: string,
+  options: { playouts?: number } = {},
 ): AIPlayer {
   const personality =
     BOT_PERSONALITIES.find((p) => p.difficulty === difficulty) ??
@@ -34,7 +35,7 @@ export function createAIPlayer(
     case AIDifficulty.Advanced:
       return new HeuristicStrategy(name);
     case AIDifficulty.Expert:
-      return new MonteCarloStrategy(name);
+      return new MonteCarloStrategy(name, options.playouts);
   }
 }
 

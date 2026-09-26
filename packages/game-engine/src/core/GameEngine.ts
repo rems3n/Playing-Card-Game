@@ -67,7 +67,12 @@ export abstract class GameEngine {
       (c) => !(c.suit === card.suit && c.rank === card.rank),
     );
 
-    // Add to current trick
+    // Add to current trick, and to the hand's record. The first card of a
+    // hand starts the record afresh: a bot that counts cards needs the ones
+    // that are gone, not only the ones in the last trick.
+    if (this.state.trickNumber === 0 && this.state.currentTrick.length === 0)
+      this.state.playedCards = [];
+    (this.state.playedCards ??= []).push({ seatIndex, card });
     this.state.currentTrick.push({ seatIndex, card });
 
     this.addEvent(GameEventType.CardPlayed, seatIndex, { card });
@@ -233,6 +238,7 @@ export abstract class GameEngine {
       roundScores: [...this.state.roundScores],
       trumpSuit: this.state.trumpSuit,
       bids: this.state.bids ? [...this.state.bids] : undefined,
+      playedCards: [...(this.state.playedCards ?? [])],
       myHand: [...this.state.players[seatIndex].hand],
       mySeat: seatIndex,
       legalMoves: this.getLegalMoves(seatIndex),

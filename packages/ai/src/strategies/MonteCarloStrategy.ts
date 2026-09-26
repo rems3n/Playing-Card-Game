@@ -1,6 +1,8 @@
 import type { Card, VisibleGameState } from '@card-game/shared-types';
 import { AIDifficulty, GameType, Suit, Rank } from '@card-game/shared-types';
 import type { AIPlayer } from '../AIPlayer.js';
+import { chooseFortyFivesBid, chooseFortyFivesCard, chooseFortyFivesTrump, DEFAULT_PLAYOUTS } from '../playout/fortyFives.js';
+import { chooseSevenSixBid, chooseSevenSixCard } from '../playout/sevenSix.js';
 
 const SIMULATIONS = 200;
 const ALL_SUITS = [Suit.Clubs, Suit.Diamonds, Suit.Hearts, Suit.Spades];
@@ -13,14 +15,25 @@ const ALL_SUITS = [Suit.Clubs, Suit.Diamonds, Suit.Hearts, Suit.Spades];
 export class MonteCarloStrategy implements AIPlayer {
   readonly difficulty = AIDifficulty.Expert;
   readonly displayName: string;
+  /** Imagined deals per decision for the family games. */
+  private readonly playouts: number;
 
-  constructor(displayName: string) {
+  constructor(displayName: string, playouts = DEFAULT_PLAYOUTS) {
     this.displayName = displayName;
+    this.playouts = playouts;
   }
 
   chooseCard(state: VisibleGameState): Card {
     const moves = state.legalMoves;
     if (moves.length <= 1) return moves[0];
+
+    // The family games are played out to the end of the hand on the real
+    // engine, with the ranking, reneging, trump and scoring the table uses.
+    // The trick-at-a-time estimate below knows none of that.
+    if (state.gameType === GameType.FortyFives)
+      return chooseFortyFivesCard(state, this.playouts);
+    if (state.gameType === GameType.SevenSix)
+      return chooseSevenSixCard(state, this.playouts);
 
     // For each legal move, run simulations
     const scores = new Map<string, { total: number; count: number }>();
@@ -72,6 +85,10 @@ export class MonteCarloStrategy implements AIPlayer {
   }
 
   chooseBid(state: VisibleGameState): number | 'pass' {
+    if (state.gameType === GameType.SevenSix)
+      return chooseSevenSixBid(state, this.playouts);
+    if (state.gameType === GameType.FortyFives)
+      return chooseFortyFivesBid(state, Math.max(12, Math.round(this.playouts / 2)));
     // Count strong cards as likely winners
     let winners = 0;
     for (const card of state.myHand) {
@@ -79,6 +96,10 @@ export class MonteCarloStrategy implements AIPlayer {
       if (card.suit === Suit.Spades && card.rank >= Rank.Ten) winners += 0.5;
     }
     return Math.max(1, Math.round(winners));
+  }
+
+  chooseTrump(state: VisibleGameState): Suit {
+    return chooseFortyFivesTrump(state, Math.max(12, Math.round(this.playouts / 2)));
   }
 
   // ── Helpers ──
