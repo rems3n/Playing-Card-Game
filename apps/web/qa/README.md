@@ -61,7 +61,10 @@ Environment variables: `BASE_URL` (default `http://localhost:3000`), `SEATS`
 e.g. `320x568,844x390`), `MIN_TOUCH`, `MIN_HAND_CARD`, `CHROMIUM_PATH`.
 
 It is not a CI gate: it needs a running server, a database and a browser
-download. Run it before shipping a change to the game page or `globals.css`.
+download, and a run costs minutes (a production build, a server restart and
+a Playwright pass). Do not run it after every change. Iterate with `next dev`
+and the unit tests; run the browser suites once, before a release or after a
+large layout change, not per CSS fix.
 
 ### Known measured constraint
 

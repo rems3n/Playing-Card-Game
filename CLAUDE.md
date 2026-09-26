@@ -28,14 +28,14 @@ packages/                   # Pure TS — shared across web, mobile, and server
   ai/                       # AI strategies — RandomStrategy, HeuristicStrategy, MonteCarloStrategy
 apps/
   server/                   # Fastify + Socket.io — GameService, gameRoom, matchmaking, ratings, friends
-  web/                      # Next.js 15 — lobby, game board, profile, leaderboard, settings
+  web/                      # Next.js 16 — lobby, game board, profile, leaderboard, settings
   mobile/                   # Expo React Native — scaffold with lobby + game screens
 ```
 
 ## Tech Stack
 
 - **Monorepo**: Turborepo with npm workspaces
-- **Web**: Next.js 15 + React 19 + TypeScript + Tailwind CSS
+- **Web**: Next.js 16 + React 19 + TypeScript + Tailwind CSS
 - **Mobile**: Expo React Native (shares all packages/ with web)
 - **State**: Zustand (shared-store package, persisted settings via localStorage)
 - **Backend**: Fastify + Socket.io
@@ -45,8 +45,8 @@ apps/
 - **Auth**: NextAuth.js v5 with Google OAuth
 - **AI**: Custom per-game strategies (Random, Heuristic, Monte Carlo)
 - **Ratings**: Glicko-2 with pairwise decomposition for multiplayer
-- **Testing**: Vitest (62 tests across 6 test files)
-- **Hosting**: Vercel (web) + Railway (server, Postgres, Redis)
+- **Testing**: Vitest unit tests in every workspace; opt-in Playwright suites in `apps/web/qa`
+- **Hosting**: Railway (web, server, Postgres, Redis)
 
 ## Architecture Principles
 
@@ -120,16 +120,19 @@ apps/
 - **Card dimming**: Only dim illegal cards when it's your turn. Bright during bidding/waiting/passing.
 - **Settings persist**: Table color + card back stored in localStorage
 
-## Testing
+## Testing — keep the loop fast
+
+Default loop for any change (target: under a minute):
 
 ```bash
-npx turbo run test --filter=@card-game/game-engine   # 62 tests
-npx turbo run build                                    # Build all packages
+npx tsc --noEmit -p <changed app or package>/tsconfig.json   # seconds
+npx turbo run test --filter=...[HEAD]                          # only packages touched since HEAD
 ```
 
-Tests cover: Card utilities, Deck operations, StateMachine transitions, HeartsEngine (21 tests), SpadesEngine (13 tests), FortyFivesEngine (92 tests across rules and seeded simulations), SevenSixEngine.
-
-Note: Server integration tests (`GameService.test.ts`) were removed during the Redis persistence refactor — they need Redis mocking to work with the async API.
+- UI work: run `cd apps/web && npm run dev` and let hot reload show the change. Do **not** do a production `next build` + server restart + Playwright run per CSS tweak.
+- `npx turbo run build` before a push that touches package exports or server code; skip it for pure web CSS/JSX changes (typecheck covers those).
+- Slow suites are opt-in: `npm run test:slow` in `packages/ai` (bot calibration games, ~30s); `npm run qa:mobile | qa:lobby | qa:call | qa:other` in `apps/web` (browser, minutes each). Run these once before a release or after a large layout change, never per fix.
+- Add a unit test for each bug fixed; prefer jsdom component tests (`apps/web/src/__tests__`) over browser runs for UI behaviour.
 
 ## Database
 

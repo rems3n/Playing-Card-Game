@@ -15,7 +15,8 @@
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "test:slow": "SLOW_TESTS=1 vitest run"
   },
   "dependencies": {
     "@card-game/shared-types": "*",
