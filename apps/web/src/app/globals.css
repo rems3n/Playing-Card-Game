@@ -1930,6 +1930,19 @@ input::placeholder {
 @media (max-width: 1000px) and (max-height: 650px) {
   .game-page { gap: 3px; padding-top: max(2px, env(safe-area-inset-top)); padding-bottom: max(4px, env(safe-area-inset-bottom)); }
   /* Six or seven trick cards need two rows; on a short screen the trick
+     space is ~170px, so the cards shrink until both rows and their name
+     labels fit instead of the second row being cut off. */
+  .game-page[data-players="7"] .trick-play .face-card,
+  .game-page[data-players="6"] .trick-play .face-card { width: 34px; height: 50px; }
+  .game-page[data-players="7"] .trick-play,
+  .game-page[data-players="6"] .trick-play { max-width: 42px; gap: 2px; }
+  .game-page[data-players="7"] .trick-play > span,
+  .game-page[data-players="6"] .trick-play > span { font-size: 7px; max-width: 42px; }
+  .game-page[data-players="7"] .trick-play .card-suit,
+  .game-page[data-players="6"] .trick-play .card-suit { font-size: 17px; }
+  .game-page[data-players="7"] .trick-cards,
+  .game-page[data-players="6"] .trick-cards { gap: 4px; }
+  /* Six or seven trick cards need two rows; on a short screen the trick
      space has ~170px, so the cards shrink until both rows and their name
      labels fit rather than being cut off at the bottom. */
   .game-page[data-players="7"] .trick-play .face-card,
