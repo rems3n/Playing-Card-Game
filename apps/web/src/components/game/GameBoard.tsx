@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -180,6 +180,36 @@ function FamilyTable() {
     }, 10000);
     return () => clearTimeout(timer);
   }, [pending, setError]);
+  // Every hook sits above this return: one that followed it changed the
+  // hook order between the waiting render and the first dealt one, and the
+  // table crashed for every game the moment the cards arrived.
+  const [passPick, setPassPick] = useState<Card[]>([]);
+  useEffect(() => {
+    if (!(state?.phase === GamePhase.Passing && !state?.passed)) setPassPick([]);
+  }, [state?.phase, state?.passed, state?.roundNumber]);
+  // A hand wider than its row fans out: each card steps a little way past
+  // the last, measured in pixels from the row itself. Percentages in a CSS
+  // custom property resolved against the wrong box and put the first card
+  // off the edge of the screen.
+  const handRow = useRef<HTMLDivElement | null>(null);
+  const [fanStep, setFanStep] = useState<number | null>(null);
+  const handCount = state?.myHand.length ?? 0;
+  useEffect(() => {
+    const row = handRow.current;
+    if (!row) return;
+    const measure = () => {
+      const card = row.querySelector<HTMLElement>(".face-card");
+      if (!card || handCount < 2) return setFanStep(null);
+      const w = card.offsetWidth;
+      const gap = 4;
+      const fits = w * handCount + gap * (handCount - 1) <= row.clientWidth;
+      setFanStep(fits ? null : (row.clientWidth - w) / (handCount - 1) - w);
+    };
+    measure();
+    const watch = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    watch?.observe(row);
+    return () => watch?.disconnect();
+  }, [handCount]);
   if (!state || state.gameId !== gameId)
     return (
       <div className="empty-state">
@@ -214,16 +244,26 @@ function FamilyTable() {
     connection.connected &&
     state.currentPlayerSeat === state.mySeat;
   const playing = state.phase === GamePhase.Playing;
+  // Hearts opens with a pass. The hand is the picker; this is the pick.
+  const passing = state.phase === GamePhase.Passing && !state.passed && !done;
+  const passWords: Record<string, string> = {
+    left: "to the left",
+    right: "to the right",
+    across: "across the table",
+    keep: "nowhere: this hand is played as dealt",
+  };
   const current = state.players.find(
     (p) => p.seatIndex === state.currentPlayerSeat,
   );
   const me = state.players.find((p) => p.seatIndex === state.mySeat);
   const name =
-    state.gameType === GameType.SevenSix
-      ? "Seven-Six"
-      : state.gameType === GameType.FortyFives
-        ? "45s"
-        : state.gameType;
+    {
+      [GameType.SevenSix]: "Seven-Six",
+      [GameType.FortyFives]: "45s",
+      [GameType.Hearts]: "Hearts",
+      [GameType.Spades]: "Spades",
+      [GameType.Rummy]: "Rummy",
+    }[state.gameType] ?? state.gameType;
   const legal = (c: Card) => state.legalMoves.some((m) => key(m) === key(c));
   const scores = gameOver?.finalScores ?? state.scores;
   const abandoned = gameOver?.winnerSeat === -1;
@@ -414,6 +454,10 @@ familyGame && !done && (
                   ? "Hand complete"
                 : done
                   ? "Thanks for playing"
+                  : state.phase === GamePhase.Passing
+                    ? passing
+                      ? "Choose 3 cards to pass"
+                      : "Waiting for the others to pass"
                   : myTurn
                     ? state.phase === GamePhase.Bidding
                       ? "Your turn to bid"
@@ -424,12 +468,18 @@ familyGame && !done && (
               Round {state.roundNumber + 1}
               {state.totalRounds ? ` / ${state.totalRounds}` : ""} &nbsp; ·
               &nbsp;{" "}
-              {state.trumpSuit
-                ? `Trump ${symbols[state.trumpSuit]}`
-                : state.gameType === GameType.FortyFives &&
-                    (state.declarerSeat ?? -1) < 0
-                  ? "Bidding"
-                  : "Choosing trump"}
+              {state.gameType === GameType.Hearts
+                ? state.phase === GamePhase.Passing
+                  ? `Pass ${passWords[state.passDirection ?? "left"]}`
+                  : state.heartsBroken
+                    ? "Hearts broken"
+                    : "Hearts not yet broken"
+                : state.trumpSuit
+                  ? `Trump ${symbols[state.trumpSuit]}`
+                  : state.gameType === GameType.FortyFives &&
+                      (state.declarerSeat ?? -1) < 0
+                    ? "Bidding"
+                    : "Choosing trump"}
             </span>
           </div>
           {roundOver && (
@@ -486,7 +536,42 @@ familyGame && !done && (
                 ))}
             </div>
             <div className="trick-space">
-              {state.phase === GamePhase.Bidding && !done ? (
+              {state.phase === GamePhase.Passing && !done ? (
+                <div className="bid-surface">
+                  <section className="bidding-panel" aria-label="Pass three cards">
+                    <h2>Passing</h2>
+                    {passing ? (
+                      <>
+                        <p id="pass-help">
+                          Choose 3 cards from your hand to pass{" "}
+                          {passWords[state.passDirection ?? "left"]}.
+                        </p>
+                        <p role="status">
+                          {passPick.length} of 3 chosen
+                          {passPick.length ? `: ${passPick.map(label).join(", ")}` : ""}
+                        </p>
+                        <button
+                          className="button primary full"
+                          type="button"
+                          aria-describedby="pass-help"
+                          disabled={passPick.length !== 3 || pending || !connection.connected}
+                          onClick={() => {
+                            if (passPick.length !== 3 || pending) return;
+                            setPending(true);
+                            socket.emit("game:pass_cards", { gameId: gameId!, cards: passPick });
+                          }}
+                        >
+                          {pending ? "Passing\u2026" : "Pass these 3 cards"}
+                        </button>
+                      </>
+                    ) : (
+                      <p role="status">
+                        Your pass is in. Waiting for the others to pass.
+                      </p>
+                    )}
+                  </section>
+                </div>
+              ) : state.phase === GamePhase.Bidding && !done ? (
                 <div className="bid-surface">
                   <BiddingPanel
                     key={`${state.roundNumber}:${state.currentPlayerSeat}:${state.declarerSeat}`}
@@ -561,15 +646,31 @@ familyGame && !done && (
                   : "Your cards stay visible while you wait"}
               </small>
             </div>
-            <div className="hand-cards" role="group" aria-label="Your cards">
+            <div
+              className="hand-cards"
+              role="group"
+              aria-label="Your cards"
+              ref={handRow}
+              style={fanStep === null ? undefined : ({ "--fan": `${fanStep}px` } as CSSProperties)}
+            >
               {state.myHand.map((card) => (
                 <button
                   key={key(card)}
-                  className={`face-card ${["H", "D"].includes(card.suit) ? "red" : ""} ${selected && key(selected) === key(card) ? "chosen" : ""} ${myTurn && playing && !legal(card) ? "illegal" : ""}`}
+                  className={`face-card ${["H", "D"].includes(card.suit) ? "red" : ""} ${(selected && key(selected) === key(card)) || passPick.some((c) => key(c) === key(card)) ? "chosen" : ""} ${myTurn && playing && !legal(card) ? "illegal" : ""}`}
                   aria-label={`${label(card)}${myTurn && playing && !legal(card) ? ", cannot play this card" : ""}`}
-                  aria-pressed={!!selected && key(selected) === key(card)}
-                  disabled={!myTurn || !playing || !legal(card) || pending}
-                  onClick={() => setSelected(card)}
+                  aria-pressed={(!!selected && key(selected) === key(card)) || passPick.some((c) => key(c) === key(card))}
+                  disabled={passing ? pending : !myTurn || !playing || !legal(card) || pending}
+                  onClick={() =>
+                    passing
+                      ? setPassPick((pick) =>
+                          pick.some((c) => key(c) === key(card))
+                            ? pick.filter((c) => key(c) !== key(card))
+                            : pick.length < 3
+                              ? [...pick, card]
+                              : pick,
+                        )
+                      : setSelected(card)
+                  }
                 >
                   <Face card={card} />
                 </button>
@@ -577,7 +678,11 @@ familyGame && !done && (
             </div>
             <div className="hand-action">
               <p>
-                {selected
+                {passing
+                  ? passPick.length === 3
+                    ? "Three chosen. Pass them above, or tap one to change it."
+                    : "Tap the cards you want to pass."
+                  : selected
                   ? label(selected)
                   : myTurn && playing
                     ? "Highlighted cards are legal moves."

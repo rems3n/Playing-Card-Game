@@ -34,6 +34,8 @@ export class RummyEngine extends GameEngine {
   private drawPile: Card[] = [];
   private discardPile: Card[] = [];
   private playerMelds: Card[][][] = [];
+  /** Whether the discard pile has already become the stock this hand. */
+  private stockTurned = false;
   private rummyPhase: 'draw' | 'discard' = 'draw';
   private numPlayers: number;
 
@@ -110,6 +112,7 @@ export class RummyEngine extends GameEngine {
   }
 
   deal(): void {
+    this.stockTurned = false;
     this.setPhase(GamePhase.Dealing);
     this.state.roundScores = new Array(this.numPlayers).fill(0);
 
@@ -167,7 +170,17 @@ export class RummyEngine extends GameEngine {
       card = this.discardPile.pop()!;
     } else {
       if (this.drawPile.length === 0) {
+        // The discard pile is turned over to make a new stock once a hand.
+        // The second time the stock runs dry nobody is going out: the hand
+        // ends there and the cards in hand count against everyone, as they
+        // would have anyway. Without this a table of small hands that could
+        // not meld drew and discarded for ever.
+        if (this.stockTurned) {
+          this.endRound();
+          return;
+        }
         this.reshuffleDiscardPile();
+        this.stockTurned = true;
       }
       if (this.drawPile.length === 0) {
         throw new Error('No cards to draw');
@@ -332,6 +345,65 @@ export class RummyEngine extends GameEngine {
     return this.playerMelds;
   }
 
+  /**
+   * Where a card fits on a meld already on the table, this player's or
+   * anyone's: a fourth suit to a set, or the next rank up or down a run.
+   */
+  private extends(meld: Card[], card: Card): boolean {
+    if (this.isValidSet(meld)) {
+      return this.isValidSet([...meld, card]);
+    }
+    return this.isValidRun([...meld, card]);
+  }
+
+  /** Every (owner, meld) a card in this seat's hand could be laid off on. */
+  getLegalLayOffs(seatIndex: number): Array<{ card: Card; ownerSeat: number; meldIndex: number }> {
+    if (this.state.phase !== GamePhase.Playing) return [];
+    if (seatIndex !== this.state.currentPlayerSeat) return [];
+    if (this.rummyPhase !== 'discard') return [];
+    const out: Array<{ card: Card; ownerSeat: number; meldIndex: number }> = [];
+    for (const card of this.state.players[seatIndex].hand)
+      this.playerMelds.forEach((melds, ownerSeat) =>
+        melds.forEach((meld, meldIndex) => {
+          if (this.extends(meld, card)) out.push({ card, ownerSeat, meldIndex });
+        }),
+      );
+    return out;
+  }
+
+  /**
+   * Lay one card off on a meld on the table. It is how a hand of one or two
+   * cards goes out; without it such a hand could only draw and discard.
+   */
+  layOff(seatIndex: number, card: Card, ownerSeat: number, meldIndex: number): void {
+    if (this.state.phase !== GamePhase.Playing) {
+      throw new Error('Not in playing phase');
+    }
+    if (seatIndex !== this.state.currentPlayerSeat) {
+      throw new Error('Not your turn');
+    }
+    if (this.rummyPhase !== 'discard') {
+      throw new Error('Must draw before laying off');
+    }
+    const hand = this.state.players[seatIndex].hand;
+    if (!cardInArray(card, hand)) {
+      throw new Error('Card not in hand');
+    }
+    const meld = this.playerMelds[ownerSeat]?.[meldIndex];
+    if (!meld) {
+      throw new Error('No such meld');
+    }
+    if (!this.extends(meld, card)) {
+      throw new Error('That card does not fit that meld');
+    }
+    this.state.players[seatIndex].hand = removeCard(card, hand);
+    this.playerMelds[ownerSeat][meldIndex] = sortCards([...meld, card]);
+    this.syncRummyState();
+    if (this.state.players[seatIndex].hand.length === 0) {
+      this.endRound();
+    }
+  }
+
   // ── Abstract implementations ──
 
   // Not used for Rummy — override playCard to throw
@@ -416,6 +488,7 @@ export class RummyEngine extends GameEngine {
       myHand: [...this.state.players[seatIndex].hand],
       mySeat: seatIndex,
       legalMoves: this.getLegalMoves(seatIndex),
+      legalLayOffs: this.getLegalLayOffs(seatIndex),
       // Rummy-specific
       drawPileCount: this.drawPile.length,
       discardTop: this.getDiscardTop(),
@@ -429,6 +502,7 @@ export class RummyEngine extends GameEngine {
   override serialize(): Record<string, unknown> {
     return {
       ...super.serialize(),
+      stockTurned: this.stockTurned,
       drawPile: this.drawPile,
       discardPile: this.discardPile,
       playerMelds: this.playerMelds,
@@ -439,6 +513,7 @@ export class RummyEngine extends GameEngine {
 
   override restore(data: Record<string, unknown>): void {
     super.restore(data);
+    this.stockTurned = (data.stockTurned as boolean) ?? false;
     this.drawPile = (data.drawPile as Card[]) ?? [];
     this.discardPile = (data.discardPile as Card[]) ?? [];
     this.playerMelds = (data.playerMelds as Card[][][]) ?? [];

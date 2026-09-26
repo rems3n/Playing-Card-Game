@@ -29,10 +29,14 @@ export function PlayingCard({ card, onClick, selected, disabled, small, scale = 
   const isRed = card.suit === Suit.Hearts || card.suit === Suit.Diamonds;
   const s = scale;
 
+  const names: Record<number, string> = { 11: "J", 12: "Q", 13: "K", 14: "A" };
+  const suits: Record<string, string> = { H: "hearts", D: "diamonds", C: "clubs", S: "spades" };
   return (
     <button
       onClick={onClick}
       disabled={disabled}
+      aria-label={`${names[card.rank] ?? card.rank} of ${suits[card.suit] ?? card.suit}`}
+      aria-pressed={selected}
       style={{
         width: small ? 42 * s : 56 * s,
         height: small ? 58 * s : 80 * s,

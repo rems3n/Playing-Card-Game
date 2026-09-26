@@ -157,6 +157,8 @@ export interface VisibleGameState {
   bids?: (number | null)[];
   /** Every card played this hand, in order. What a careful player remembers. */
   playedCards?: PlayedCard[];
+  /** Hearts: this seat has handed in its pass and waits for the others. */
+  passed?: boolean;
   myHand: Card[];
   mySeat: number;
   legalMoves: Card[];
@@ -170,6 +172,8 @@ export interface VisibleGameState {
   declarerSeat?: number;
   contract?: number;
   // Rummy-specific (visible to all)
+  /** Where a card in this hand could be laid off on a meld on the table. */
+  legalLayOffs?: Array<{ card: Card; ownerSeat: number; meldIndex: number }>;
   drawPileCount?: number;
   discardTop?: Card | null;
   melds?: Card[][][]; // all players' melds

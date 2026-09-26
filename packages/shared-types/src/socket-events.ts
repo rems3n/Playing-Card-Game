@@ -42,6 +42,13 @@ export interface ClientToServerEvents {
   "game:deal_next": (data: { gameId: string; roundNumber: number }) => void;
   "game:set_auto_deal": (data: { gameId: string; enabled: boolean }) => void;
   "game:pass_cards": (data: { gameId: string; cards: Card[] }) => void;
+  /** Rummy: lay one card off on a meld already on the table. */
+  "game:lay_off": (data: {
+    gameId: string;
+    card: Card;
+    ownerSeat: number;
+    meldIndex: number;
+  }) => void;
   "game:call_trump": (data: { gameId: string; suit: string | "pass" }) => void;
   "game:go_alone": (data: { gameId: string }) => void;
   "game:draw_card": (data: {

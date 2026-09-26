@@ -10,7 +10,8 @@
     "test": "vitest run",
     "qa:mobile": "node qa/mobile-layout.mjs",
     "qa:lobby": "node qa/lobby-flows.mjs",
-    "qa:call": "node qa/call-flows.mjs"
+    "qa:call": "node qa/call-flows.mjs",
+    "qa:other": "node qa/other-games.mjs"
   },
   "dependencies": {
     "@card-game/shared-socket": "*",

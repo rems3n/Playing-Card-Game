@@ -411,8 +411,14 @@ h2 {
 }
 .game-choices {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* minmax(0, 1fr): a bare 1fr will not shrink below a card's content, and
+     with five cards on the page a 390px phone laid the grid out 556px wide,
+     with the second column off the screen. */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 14px;
+}
+.game-choice {
+  min-width: 0;
 }
 .game-choice {
   position: relative;
@@ -1534,6 +1540,27 @@ input::placeholder {
   min-width: 0;
 }
 
+.other-games-heading {
+  margin: 18px 0 8px;
+}
+/* A select is as wide as its longest option unless told otherwise, and
+   would widen the whole page on a phone. */
+.difficulty-field select,
+.setup-fields select {
+  width: 100%;
+  min-width: 0;
+}
+.difficulty-field small {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+.game-choices.other-games .game-choice p {
+  min-height: 0;
+}
+
 /* Family-game interaction and completed-trick review. */
 .bidding-panel {
   color: var(--text-primary);
@@ -1826,7 +1853,17 @@ input::placeholder {
   .my-seat .avatar { display: none; }
   .my-seat > strong { max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .my-score { font-size: 10px; white-space: nowrap; }
-  .bid-surface { width: 100%; max-width: 460px; }
+  /* 14px, not the desktop's 22: the trick space scrolls rather than spills
+     now, and at seven seats the bid card was 3px taller than its space. */
+  .bid-surface { width: 100%; max-width: 460px; padding: 14px; }
+  /* Seven trick cards wrap to two rows on a phone; a little smaller and
+     the second row's name labels are not cut off at the bottom. */
+  .game-page[data-players="7"] .trick-play .face-card,
+  .game-page[data-players="6"] .trick-play .face-card { width: 40px; height: 58px; }
+  .game-page[data-players="7"] .trick-play > span,
+  .game-page[data-players="6"] .trick-play > span { font-size: 8px; }
+  .game-page[data-players="7"] .trick-cards,
+  .game-page[data-players="6"] .trick-cards { gap: 6px; }
   .bidding-panel { padding: 10px; border-radius: 10px; }
   .bidding-panel h2 { font-size: 15px; margin: 0 0 5px; }
   .bidding-panel p { font-size: 11px; line-height: 1.3; margin: 4px 0; }
@@ -1837,8 +1874,22 @@ input::placeholder {
   .hand-panel { flex: 0 0 auto; padding: 8px; }
   .hand-heading { font-size: 11px; margin: 0 0 3px; }
   .hand-heading small { display: none; }
+  /* Seven cards sit side by side. More than fit -- Hearts and Spades deal
+     thirteen -- overlap just enough to stay on screen, each still a full
+     touch target with its corner showing; a chosen card lifts clear. */
   .hand-cards { flex-wrap: nowrap; min-height: 0; gap: 4px; padding: 7px 0; }
-  .hand-cards .face-card { width: min(52px, calc((100vw - 60px) / 7)); height: auto; aspect-ratio: 9 / 13; touch-action: manipulation; }
+  .hand-cards .face-card { width: min(52px, calc((100vw - 60px) / 7)); height: auto; aspect-ratio: 9 / 13; touch-action: manipulation; flex: 0 0 auto; }
+  /* A hand that will not fit fans out: the table measures the overlap and
+     sets it here. A chosen card lifts clear but does not grow, so it never
+     covers the edge of the card beside it that a thumb is about to tap. */
+  .hand-cards[style*="--fan"] { gap: 0; }
+  .hand-cards[style*="--fan"] .face-card { position: relative; }
+  .hand-cards[style*="--fan"] .face-card + .face-card { margin-left: var(--fan); }
+  .hand-cards .face-card.chosen { position: relative; z-index: 2; }
+  /* In a fan the later card stays on top, so a chosen card lifts without
+     covering the edge of the card beside it that a thumb is about to tap. */
+  .hand-cards[style*="--fan"] .face-card.chosen { transform: translateY(-14px); z-index: auto; }
+  .game-page[data-phase="passing"] .hand-action { display: none; }
   .hand-cards .card-corner { left: 4px; top: 4px; font-size: 16px; }
   .hand-cards .card-corner small { font-size: 11px; }
   .hand-cards .card-suit { font-size: 25px; }
@@ -1878,6 +1929,19 @@ input::placeholder {
 }
 @media (max-width: 1000px) and (max-height: 650px) {
   .game-page { gap: 3px; padding-top: max(2px, env(safe-area-inset-top)); padding-bottom: max(4px, env(safe-area-inset-bottom)); }
+  /* Six or seven trick cards need two rows; on a short screen the trick
+     space has ~170px, so the cards shrink until both rows and their name
+     labels fit rather than being cut off at the bottom. */
+  .game-page[data-players="7"] .trick-play .face-card,
+  .game-page[data-players="6"] .trick-play .face-card { width: 34px; height: 50px; }
+  .game-page[data-players="7"] .trick-play,
+  .game-page[data-players="6"] .trick-play { max-width: 42px; gap: 2px; }
+  .game-page[data-players="7"] .trick-play > span,
+  .game-page[data-players="6"] .trick-play > span { font-size: 7px; max-width: 42px; }
+  .game-page[data-players="7"] .trick-play .card-suit,
+  .game-page[data-players="6"] .trick-play .card-suit { font-size: 17px; }
+  .game-page[data-players="7"] .trick-cards,
+  .game-page[data-players="6"] .trick-cards { gap: 4px; }
   .table-layout { gap: 3px; }
   .bidding-panel #bid-help { display: none; }
   /* Short screens: the status line above the table already says it is your

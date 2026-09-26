@@ -76,24 +76,36 @@ export class RoomService {
     config: Partial<GameConfig>,
     player: RoomPlayer,
   ) {
-    const maxPlayers = config.maxPlayers ?? 4;
-    if (![GameType.SevenSix, GameType.FortyFives].includes(gameType))
-      throw new Error("Choose Seven-Six or 45s");
-    // Forty-Fives is played by two, four or six; Seven-Six by two to seven.
-    const fortyFives = gameType === GameType.FortyFives;
-    if (
-      !Number.isInteger(maxPlayers) ||
-      maxPlayers < 2 ||
-      maxPlayers > 7 ||
-      (fortyFives && ![2, 4, 6].includes(maxPlayers))
-    )
+    // Each game has its own table sizes: Forty-Fives is played by two, four
+    // or six, Seven-Six by two to seven, Hearts and Spades by four exactly,
+    // Rummy by two to six.
+    const seats: Partial<Record<GameType, number[]>> = {
+      [GameType.SevenSix]: [2, 3, 4, 5, 6, 7],
+      [GameType.FortyFives]: [2, 4, 6],
+      [GameType.Hearts]: [4],
+      [GameType.Spades]: [4],
+      [GameType.Rummy]: [2, 3, 4, 5, 6],
+    };
+    const allowed = seats[gameType];
+    if (!allowed) throw new Error("Choose a game from the list");
+    const maxPlayers = config.maxPlayers ?? (allowed.includes(4) ? 4 : allowed[0]);
+    if (!Number.isInteger(maxPlayers) || !allowed.includes(maxPlayers))
       throw new Error("Invalid player count");
-    const targetScore = fortyFives ? (config.targetScore ?? 45) : 0;
+    // The score a game ends at, where it ends on a score at all.
+    const defaults: Partial<Record<GameType, number>> = {
+      [GameType.FortyFives]: 45,
+      [GameType.Hearts]: 100,
+      [GameType.Spades]: 500,
+      [GameType.Rummy]: 100,
+    };
+    const fortyFives = gameType === GameType.FortyFives;
+    const targetScore =
+      gameType === GameType.SevenSix ? 0 : (config.targetScore ?? defaults[gameType] ?? 0);
     if (
       !Number.isInteger(targetScore) ||
       targetScore < 0 ||
-      targetScore > 200 ||
-      (fortyFives && targetScore < 1)
+      targetScore > 1000 ||
+      (fortyFives && (targetScore < 1 || targetScore > 200))
     )
       throw new Error("Invalid target score");
     // Empty seats are filled with bots at the level the host chose.

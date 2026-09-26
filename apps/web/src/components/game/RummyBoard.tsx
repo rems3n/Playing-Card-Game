@@ -132,7 +132,7 @@ export function RummyBoard() {
   const allMelds = gameState.melds ?? [];
 
   return (
-    <div className="flex gap-3 p-3 h-full">
+    <div className="flex flex-col md:flex-row gap-3 p-3 md:h-full">
       {/* Main area */}
       <div className="flex-1 min-w-0 flex flex-col gap-2 h-full">
         {/* Game over banner */}
@@ -277,6 +277,7 @@ export function RummyBoard() {
                       disabled={!isDrawPhase}
                       className={`relative transition-all ${isDrawPhase ? 'cursor-pointer hover:scale-105 hover:-translate-y-1' : 'cursor-default'}`}
                       title={isDrawPhase ? 'Draw from pile' : undefined}
+                      aria-label={`Draw from stock, ${gameState.drawPileCount ?? 0} cards`}
                     >
                       {/* Stacked card effect */}
                       <div className="relative">
@@ -355,7 +356,7 @@ export function RummyBoard() {
 
               {/* My hand */}
               <div className="flex justify-center">
-                <div className="flex" style={{ gap: 3 * s }}>
+                <div className="flex rummy-hand" role="group" aria-label="Your cards" style={{ gap: 3 * s }}>
                   {gameState.myHand.map((card) => {
                     const isSelected = selectedCards.some((c) => c.suit === card.suit && c.rank === card.rank);
                     return (
@@ -395,6 +396,23 @@ export function RummyBoard() {
                       Discard
                     </button>
                   )}
+                  {/* Laying off: the engine says where the chosen card fits. */}
+                  {selectedCards.length === 1 &&
+                    (gameState.legalLayOffs ?? [])
+                      .filter((fit) => fit.card.suit === selectedCards[0].suit && fit.card.rank === selectedCards[0].rank)
+                      .map((fit) => (
+                        <button
+                          key={`${fit.ownerSeat}-${fit.meldIndex}`}
+                          onClick={() => {
+                            if (!gameId) return;
+                            socket.emit('game:lay_off', { gameId, card: fit.card, ownerSeat: fit.ownerSeat, meldIndex: fit.meldIndex });
+                            clearSelectedCards();
+                          }}
+                          className="px-4 py-1.5 text-[13px] font-semibold bg-[var(--accent-gold)] text-[#1a1a1a] rounded-md hover:brightness-110 transition-all"
+                        >
+                          Lay off on {fit.ownerSeat === gameState.mySeat ? 'your' : `${gameState.players[fit.ownerSeat]?.displayName}'s`} {(allMelds[fit.ownerSeat]?.[fit.meldIndex] ?? []).length}-card meld
+                        </button>
+                      ))}
                   {selectedCards.length === 0 && (
                     <span className="text-[12px] text-[var(--text-muted)] py-1.5">
                       Select cards to meld or pick one to discard
@@ -413,7 +431,7 @@ export function RummyBoard() {
       </div>
 
       {/* Sidebar */}
-      <div className="w-56 shrink-0 flex flex-col gap-2 h-full">
+      <div className="w-full md:w-56 shrink-0 flex flex-col gap-2 md:h-full">
         <ScoreBoard players={gameState.players} scores={gameState.scores} roundScores={gameState.roundScores} mySeat={gameState.mySeat} />
 
         <div className="bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-subtle)] overflow-hidden">

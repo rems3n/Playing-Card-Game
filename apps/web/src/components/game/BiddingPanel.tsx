@@ -21,74 +21,71 @@ export function BiddingPanel({
   const isMyTurn = gameState.currentPlayerSeat === gameState.mySeat;
 
   if (gameState.gameType === GameType.Spades) {
-    // Legacy Spades surface: it keeps a stepper with a default of 1.
-    const spadesBid = selectedBid ?? 1;
+    // Nil is a bid of no tricks at all; the tiles run one to thirteen.
+    const validBid =
+      selectedBid !== null && selectedBid >= 0 && selectedBid <= 13
+        ? selectedBid
+        : null;
     return (
-      <div className="bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-subtle)] p-4 text-center">
-        <div className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3">
-          Bidding
-        </div>
-
-        {/* Bids so far */}
-        <div className="flex justify-center gap-4 mb-4">
-          {gameState.players.map((p) => (
-            <div key={p.seatIndex} className="text-center min-w-0">
-              <div className="text-[11px] text-[var(--text-muted)] truncate max-w-[80px]">
-                {p.displayName}
-              </div>
-              <div className="text-lg font-bold mt-0.5">
-                {gameState.bids?.[p.seatIndex] != null
-                  ? gameState.bids[p.seatIndex]
-                  : "\u2014"}
-              </div>
-            </div>
-          ))}
-        </div>
-
+      <section className="bidding-panel" aria-label="Choose your bid">
+        <h2>Bidding</h2>
         {isMyTurn ? (
-          <div>
-            <p className="text-[12px] text-[var(--accent-green)] font-semibold mb-2">
-              Your bid
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!pending && validBid !== null) onBid(validBid);
+            }}
+          >
+            <p id="bid-help">
+              Choose how many tricks you expect to win with spades as trump.
+              Your pair needs its two bids together.
             </p>
-            <div className="flex items-center justify-center gap-2 mb-3">
+            <div className="bid-options" role="group" aria-label="Bid options">
               <button
-                onClick={() => setSelectedBid(Math.max(0, spadesBid - 1))}
-                className="w-7 h-7 rounded bg-[var(--bg-tertiary)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] flex items-center justify-center text-sm"
-              >
-                -
-              </button>
-              <span className="text-xl font-bold w-8 text-center tabular-nums">
-                {spadesBid}
-              </span>
-              <button
-                onClick={() => setSelectedBid(Math.min(13, spadesBid + 1))}
-                className="w-7 h-7 rounded bg-[var(--bg-tertiary)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] flex items-center justify-center text-sm"
-              >
-                +
-              </button>
-            </div>
-            <div className="flex justify-center gap-2">
-              <button
-                onClick={() => onBid(0)}
-                className="px-3 py-1.5 text-[12px] border border-[var(--border-subtle)] rounded hover:bg-white/[0.04] transition-colors"
+                type="button"
+                aria-label="Bid nil: no tricks"
+                aria-pressed={validBid === 0}
+                disabled={pending}
+                onClick={() => setSelectedBid(0)}
               >
                 Nil
               </button>
-              <button
-                onClick={() => onBid(spadesBid)}
-                className="px-5 py-1.5 text-[12px] font-semibold bg-[var(--accent-green)] text-white rounded hover:brightness-110 transition-all"
-              >
-                Bid {spadesBid}
-              </button>
+              {Array.from({ length: 13 }, (_, i) => i + 1).map((bid) => (
+                <button
+                  type="button"
+                  key={bid}
+                  aria-label={`Bid ${bid}`}
+                  aria-pressed={bid === validBid}
+                  disabled={pending}
+                  onClick={() => setSelectedBid(bid)}
+                >
+                  {bid}
+                </button>
+              ))}
             </div>
-          </div>
+            <button
+              className="button primary full"
+              type="submit"
+              disabled={pending || validBid === null}
+              aria-describedby="bid-help"
+            >
+              {pending
+                ? "Submitting\u2026"
+                : validBid === null
+                  ? "Submit bid"
+                  : validBid === 0
+                    ? "Submit bid: nil"
+                    : `Submit bid: ${validBid}`}
+            </button>
+          </form>
         ) : (
-          <p className="text-[12px] text-[var(--text-muted)]">
+          <p role="status">
             Waiting for{" "}
-            {gameState.players[gameState.currentPlayerSeat]?.displayName}
+            {gameState.players[gameState.currentPlayerSeat]?.displayName} to
+            bid.
           </p>
         )}
-      </div>
+      </section>
     );
   }
 

@@ -3,6 +3,7 @@ import { AIDifficulty, GameType, Suit, Rank } from '@card-game/shared-types';
 import type { AIPlayer } from '../AIPlayer.js';
 import { chooseFortyFivesBid, chooseFortyFivesCard, chooseFortyFivesTrump, DEFAULT_PLAYOUTS } from '../playout/fortyFives.js';
 import { chooseSevenSixBid, chooseSevenSixCard } from '../playout/sevenSix.js';
+import { chooseDiscard as rummyChooseDiscard } from '../games/RummyAI.js';
 
 const SIMULATIONS = 200;
 const ALL_SUITS = [Suit.Clubs, Suit.Diamonds, Suit.Hearts, Suit.Spades];
@@ -34,6 +35,9 @@ export class MonteCarloStrategy implements AIPlayer {
       return chooseFortyFivesCard(state, this.playouts);
     if (state.gameType === GameType.SevenSix)
       return chooseSevenSixCard(state, this.playouts);
+    // A Rummy discard is not a trick; the trick estimator below would throw
+    // away the highest card every turn and never build a meld.
+    if (state.gameType === GameType.Rummy) return rummyChooseDiscard(state);
 
     // For each legal move, run simulations
     const scores = new Map<string, { total: number; count: number }>();

@@ -2,6 +2,7 @@ import {
   type Card,
   type GameConfig,
   type GameState,
+  type VisibleGameState,
   type PlayedCard,
   type PlayerState,
   type TrickResult,
@@ -160,6 +161,13 @@ export class HeartsEngine extends GameEngine {
 
   hasPlayerPassed(seatIndex: number): boolean {
     return this.pendingPasses.has(seatIndex);
+  }
+
+  getVisibleState(seatIndex: number): VisibleGameState {
+    return {
+      ...super.getVisibleState(seatIndex),
+      passed: this.hasPlayerPassed(seatIndex),
+    };
   }
 
   private resolvePassing(): void {

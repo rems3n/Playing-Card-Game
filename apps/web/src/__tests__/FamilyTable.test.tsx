@@ -166,6 +166,79 @@ describe("family table interactions", () => {
   });
 });
 
+describe("Hearts passing", () => {
+  function hearts(): VisibleGameState {
+    const state = initial();
+    state.gameType = GameType.Hearts;
+    state.config = { gameType: GameType.Hearts, maxPlayers: 4, targetScore: 100 };
+    state.phase = GamePhase.Passing;
+    state.passDirection = "left" as VisibleGameState["passDirection"];
+    state.trumpSuit = undefined;
+    state.currentTrick = [];
+    state.legalMoves = [];
+    state.bids = undefined;
+    state.myHand = [
+      { rank: 2, suit: Suit.Clubs },
+      { rank: 12, suit: Suit.Spades },
+      { rank: 14, suit: Suit.Hearts },
+      { rank: 10, suit: Suit.Diamonds },
+    ];
+    state.players.forEach((p) => (p.cardCount = 4));
+    return state;
+  }
+
+  it("lets the player pick exactly three cards and pass them once", () => {
+    useGameStore.getState().setGameState(hearts());
+    render(<GameBoard />);
+    expect(screen.getByText("Choose 3 cards to pass")).toBeTruthy();
+    const pass = screen.getByRole("button", { name: "Pass these 3 cards" });
+    expect((pass as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "2 of clubs" }));
+    fireEvent.click(screen.getByRole("button", { name: "Q of spades" }));
+    fireEvent.click(screen.getByRole("button", { name: "A of hearts" }));
+    // A fourth pick is refused; the choice must be changed, not extended.
+    fireEvent.click(screen.getByRole("button", { name: "10 of diamonds" }));
+    expect(screen.getByText(/3 of 3 chosen/).textContent).not.toContain("10 of diamonds");
+    // Tapping a chosen card un-chooses it.
+    fireEvent.click(screen.getByRole("button", { name: "A of hearts" }));
+    expect(screen.getByText(/2 of 3 chosen/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "10 of diamonds" }));
+    expect((pass as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(pass);
+    fireEvent.click(pass);
+    expect(transport.emit).toHaveBeenCalledExactlyOnceWith("game:pass_cards", {
+      gameId: "test-game",
+      cards: [
+        { rank: 2, suit: Suit.Clubs },
+        { rank: 12, suit: Suit.Spades },
+        { rank: 10, suit: Suit.Diamonds },
+      ],
+    });
+  });
+
+  it("says so once the pass is in, and keeps the hand visible", () => {
+    const state = hearts();
+    state.passed = true;
+    useGameStore.getState().setGameState(state);
+    render(<GameBoard />);
+    expect(screen.getByText("Waiting for the others to pass")).toBeTruthy();
+    expect(screen.getByText(/Your pass is in/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Pass these 3 cards" })).toBeNull();
+    expect(screen.getAllByRole("button", { name: /of (clubs|spades|hearts|diamonds)$/ })).toHaveLength(4);
+  });
+
+  it("names the game and shows whether hearts are broken", () => {
+    const state = hearts();
+    state.phase = GamePhase.Playing;
+    state.heartsBroken = false;
+    state.legalMoves = [state.myHand[0]];
+    useGameStore.getState().setGameState(state);
+    render(<GameBoard />);
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Hearts");
+    expect(screen.getByText(/Hearts not yet broken/)).toBeTruthy();
+  });
+});
+
 describe("trump and next-hand controls", () => {
   it("shows the actual trump card separately from playable cards", () => {
     const state = initial();

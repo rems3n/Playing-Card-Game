@@ -24,6 +24,23 @@ export default function Home() {
       : count < 6
         ? 4
         : 6;
+  // Hearts and Spades seat four; Rummy two to six; the rest as chosen.
+  const seatChoices =
+    game === GameType.FortyFives
+      ? [2, 4, 6]
+      : game === GameType.Hearts || game === GameType.Spades
+        ? [4]
+        : game === GameType.Rummy
+          ? [2, 3, 4, 5, 6]
+          : [2, 3, 4, 5, 6, 7];
+  const seats =
+    game === GameType.FortyFives
+      ? fortyFivesSeats
+      : seatChoices.includes(count)
+        ? count
+        : seatChoices.includes(4)
+          ? 4
+          : seatChoices[seatChoices.length - 1];
   const [difficulty, setDifficulty] = useState(AIDifficulty.Beginner);
   const [mode, setMode] = useState<"friends" | "practice">("friends");
   const [code, setCode] = useState("");
@@ -78,8 +95,11 @@ export default function Home() {
         return;
       }
       const config = {
-        maxPlayers: game === GameType.FortyFives ? fortyFivesSeats : count,
-        targetScore: game === GameType.FortyFives ? 45 : 0,
+        maxPlayers: seats,
+        targetScore:
+          { [GameType.FortyFives]: 45, [GameType.Hearts]: 100, [GameType.Spades]: 500, [GameType.Rummy]: 100 }[
+            game as string
+          ] ?? 0,
         // Bots take any seat nobody fills, in either mode, at this level.
         aiDifficulty: difficulty,
       };
@@ -176,6 +196,49 @@ export default function Home() {
               </button>
             ))}
           </div>
+          <p className="eyebrow other-games-heading">OTHER GAMES</p>
+          <div className="game-choices other-games" role="group" aria-label="Other games">
+            {[
+              {
+                type: GameType.Hearts,
+                name: "Hearts",
+                symbol: "\u2665",
+                meta: "4 players",
+                copy: "Avoid hearts and the queen of spades. Lowest score wins.",
+              },
+              {
+                type: GameType.Spades,
+                name: "Spades",
+                symbol: "\u2660",
+                meta: "4 players, in pairs",
+                copy: "Bid your tricks with spades as trump. First pair to 500.",
+              },
+              {
+                type: GameType.Rummy,
+                name: "Rummy",
+                symbol: "R",
+                meta: "2\u20136 players",
+                copy: "Draw and discard to lay down sets and runs. Go out to score.",
+              },
+            ].map((g) => (
+              <button
+                key={g.type}
+                className={`game-choice ${game === g.type ? "selected" : ""}`}
+                aria-pressed={game === g.type}
+                onClick={() => setGame(g.type)}
+              >
+                <span className="game-symbol" aria-hidden>
+                  {g.symbol}
+                </span>
+                <span className="choice-check" aria-hidden>
+                  {game === g.type ? "\u2713" : ""}
+                </span>
+                <strong>{g.name}</strong>
+                <small>{g.meta}</small>
+                <p>{g.copy}</p>
+              </button>
+            ))}
+          </div>
           <div className="mode-switch" role="group" aria-label="Play mode">
             <button
               aria-pressed={mode === "friends"}
@@ -205,13 +268,11 @@ export default function Home() {
             <label>
               Seats at the table
               <select
-                value={game === GameType.FortyFives ? fortyFivesSeats : count}
+                value={seats}
+                disabled={seatChoices.length === 1}
                 onChange={(e) => setCount(Number(e.target.value))}
               >
-                {(game === GameType.FortyFives
-                  ? [2, 4, 6]
-                  : [2, 3, 4, 5, 6, 7]
-                ).map((n) => (
+                {seatChoices.map((n) => (
                   <option key={n} value={n}>
                     {n} players
                   </option>
@@ -225,16 +286,17 @@ export default function Home() {
               value={difficulty}
               onChange={(e) => setDifficulty(e.target.value as AIDifficulty)}
             >
-              <option value={AIDifficulty.Beginner}>
-                Beginner — plays any legal card, bids at random
-              </option>
-              <option value={AIDifficulty.Intermediate}>
-                Medium — follows the standard lines, bids what it holds
-              </option>
-              <option value={AIDifficulty.Expert}>
-                Expert — counts cards and plays out each hand before choosing
-              </option>
+              <option value={AIDifficulty.Beginner}>Beginner</option>
+              <option value={AIDifficulty.Intermediate}>Medium</option>
+              <option value={AIDifficulty.Expert}>Expert</option>
             </select>
+            <small>
+              {difficulty === AIDifficulty.Beginner
+                ? "Plays any legal card and bids at random."
+                : difficulty === AIDifficulty.Expert
+                  ? "Counts the cards that have gone and plays each hand out before choosing."
+                  : "Follows the standard lines and bids what it holds."}
+            </small>
           </label>
           <p className="setup-note">
             {mode === "friends"
@@ -242,6 +304,8 @@ export default function Home() {
               : "Play at your own pace with computer opponents."}{" "}
             {game === GameType.FortyFives &&
               "Four and six play in two teams, sitting alternately."}
+            {game === GameType.Spades && "Partners sit across from each other."}
+            {game === GameType.Hearts && "Pass three cards each hand; the game ends at 100 points."}
           </p>
           {error && (
             <p role="alert" className="notice error">

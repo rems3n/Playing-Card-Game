@@ -26,10 +26,43 @@ const GAMES = [
     summary:
       "A trick-taking bidding game where hand sizes shrink then grow. Bid exactly how many tricks you'll take — hit your bid to score bid + 10, miss and you get zero. Trump is revealed each round by flipping a card.",
   },
+  {
+    type: "hearts" as const,
+    title: "Hearts",
+    tagline: "Avoid the hearts and the queen of spades",
+    players: "4 players",
+    difficulty: "Passing and avoidance",
+    color: "#c33",
+    icon: "\u2665",
+    summary:
+      "Pass three cards, then take as few penalty cards as you can: each heart is a point and the queen of spades thirteen. Take them all to shoot the moon. Lowest score when someone reaches 100 wins.",
+  },
+  {
+    type: "spades" as const,
+    title: "Spades",
+    tagline: "Bid your tricks with spades always trump",
+    players: "4 players, in pairs",
+    difficulty: "Bidding and partnerships",
+    color: "#1a1a1a",
+    icon: "\u2660",
+    summary:
+      "Partners sit across. Each player bids the tricks they will take; a pair that makes its combined bid scores ten a trick, and bags and failed bids cost. Nil is a bid to take none. First pair to 500.",
+  },
+  {
+    type: "rummy" as const,
+    title: "Rummy",
+    tagline: "Draw, discard, and lay down sets and runs",
+    players: "2\u20136 players",
+    difficulty: "Melding",
+    color: "var(--accent-green)",
+    icon: "R",
+    summary:
+      "Draw from the stock or the discard pile, lay down three of a kind or runs in a suit, and discard. Going out ends the hand; the cards left in other hands count against them.",
+  },
 ];
 
 export default function RulesPage() {
-  const [activeGame, setActiveGame] = useState<"seven-six" | "forty-fives" | null>(
+  const [activeGame, setActiveGame] = useState<"seven-six" | "forty-fives" | "hearts" | "spades" | "rummy" | null>(
     null,
   );
 

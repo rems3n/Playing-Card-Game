@@ -84,11 +84,9 @@ export default function HistoryPage() {
                 <summary>
                   <span>
                     <strong>
-                      {game.gameType === "seven-six"
-                        ? "Seven-Six"
-                        : game.gameType === "forty-fives"
-                          ? "45s"
-                          : game.gameType}
+                      {{ "seven-six": "Seven-Six", "forty-fives": "45s", hearts: "Hearts", spades: "Spades", rummy: "Rummy" }[
+                        game.gameType
+                      ] ?? game.gameType}
                     </strong>
                     <small>
                       {new Date(game.completedAt).toLocaleDateString(
@@ -111,7 +109,7 @@ export default function HistoryPage() {
                           {p.displayName}
                           {p.seatPosition === game.mySeat ? " (you)" : ""}
                           {p.isAi ? " · Bot" : ""}
-                          {game.gameType === "forty-fives"
+                          {game.gameType === "forty-fives" || game.gameType === "spades"
                             ? ` · Team ${(p.seatPosition % 2) + 1}`
                             : ""}
                         </span>

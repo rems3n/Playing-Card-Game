@@ -1040,6 +1040,65 @@ export function setupGameHandlers(
       }
     });
 
+    socket.on("game:lay_off", async (data) => {
+      try {
+        const { gameId } = data;
+        const seat = await gameService.getSeatForSocket(gameId, socket.id);
+        if (seat === undefined) {
+          socket.emit("game:error", {
+            code: "NOT_IN_GAME",
+            message: "You are not in this game",
+          });
+          return;
+        }
+
+        await gameService.rummyLayOff(gameId, seat, data.card, data.ownerSeat, data.meldIndex);
+        await broadcastStates(io, gameService, gameId);
+
+        // Check if round/game ended
+        const phase = await gameService.getPhase(gameId);
+        if (phase === GamePhase.GameOver) {
+          const room = await gameService.getRoom(gameId);
+          if (room) {
+            const state = room.engine.getState();
+            const winner = room.engine.getWinnerSeat();
+            io.to(gameId).emit("game:over", {
+              gameId,
+              finalScores: state.scores,
+              winnerSeat: winner,
+            });
+          }
+          return;
+        }
+
+        // Handle AI turns
+        if (phase === GamePhase.Playing) {
+          await handleAITurns(io, gameService, gameId);
+          await broadcastStates(io, gameService, gameId);
+
+          // Check again after AI turns
+          const newPhase = await gameService.getPhase(gameId);
+          if (newPhase === GamePhase.GameOver) {
+            const room = await gameService.getRoom(gameId);
+            if (room) {
+              const state = room.engine.getState();
+              const winner = room.engine.getWinnerSeat();
+              io.to(gameId).emit("game:over", {
+                gameId,
+                finalScores: state.scores,
+                winnerSeat: winner,
+              });
+            }
+          }
+        }
+      } catch (err: any) {
+        socket.emit("game:error", {
+          code: "DISCARD_FAILED",
+          message: err.message,
+        });
+      }
+    });
+
     // ── In-game chat ──
     socket.on("chat:message", async (data) => {
       const { gameId, text } = data;

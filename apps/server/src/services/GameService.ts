@@ -464,6 +464,21 @@ export class GameService {
     await this.persist(gameId);
   }
 
+  async rummyLayOff(
+    gameId: string,
+    seatIndex: number,
+    card: Card,
+    ownerSeat: number,
+    meldIndex: number,
+  ): Promise<void> {
+    const room = await this.ensureLoaded(gameId);
+    if (!room) throw new Error("Game not found");
+    if (!(room.engine instanceof RummyEngine))
+      throw new Error("Not a Rummy game");
+    room.engine.layOff(seatIndex, card, ownerSeat, meldIndex);
+    await this.persist(gameId);
+  }
+
   async rummyLayMeld(
     gameId: string,
     seatIndex: number,
@@ -837,6 +852,20 @@ export class GameService {
           } catch {
             // Meld may fail if cards overlap between melds — skip
           }
+        }
+
+        if (rummyEngine.getState().phase !== GamePhase.Playing) break;
+
+        // Lay off whatever fits a meld on the table. This is how a hand of
+        // one or two cards goes out; a bounded loop, since each pass
+        // shortens the hand.
+        for (let guard = 0; guard < 20; guard++) {
+          const fit = rummyEngine.getLegalLayOffs(currentSeat)[0];
+          if (!fit) break;
+          await this.delay(400);
+          rummyEngine.layOff(currentSeat, fit.card, fit.ownerSeat, fit.meldIndex);
+          await this.persist(gameId);
+          if (rummyEngine.getState().phase !== GamePhase.Playing) break;
         }
 
         if (rummyEngine.getState().phase !== GamePhase.Playing) break;
