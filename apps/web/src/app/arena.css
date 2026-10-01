@@ -137,7 +137,7 @@ body:has(.arena-game) { overflow: hidden; }
   .arena-game .opponent .avatar { display: none; }
   .arena-game .opponent strong { font-size: 11px; }
   .arena-game .opponent small { font-size: 9px; }
-  .arena-game .opponent-score { display: flex; align-items: center; justify-content: space-between; margin-top: 3px; }
+  .arena-game .opponent-score { display: flex; flex-direction: row; align-items: center; justify-content: space-between; margin-top: 3px; }
   .arena-game .opponent-score > small:last-child { display: none; }
   .arena-game .opponent-score strong small { display: inline; }
   .arena-game .opponents .opponent { left: clamp(50px,var(--seat-x),calc(100% - 50px)); }
