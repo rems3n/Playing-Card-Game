@@ -174,7 +174,6 @@ export default function Home() {
                 ))}
               </select>
             </label>
-          </div>
           <label className="difficulty-field">
             {mode === "practice" ? "Bot difficulty" : "Bots in empty seats"}
             <select
@@ -193,6 +192,7 @@ export default function Home() {
                   : "Follows the standard lines and bids what it holds."}
             </small>
           </label>
+          </div>
           <p className="setup-note">
             {mode === "friends"
               ? "Create a private table and share the invite. Bots at the level above fill any empty seats when the game starts."

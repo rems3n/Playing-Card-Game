@@ -44,12 +44,12 @@ body:has(.arena-game) { overflow: hidden; }
 .arena-game .game-heading h1 { font-family: inherit; font-size: 18px; letter-spacing: -.4px; }
 .arena-game .game-heading-actions { gap: 8px; }
 .arena-game .game-heading-actions .button { min-height: 44px; padding: 8px 14px; font-size: 13px; }
-.arena-game .table-layout { display: grid; grid-template-columns: minmax(0,1fr) 260px; grid-template-areas: 'main aside'; grid-template-rows: minmax(0,1fr); gap: 16px; flex: 1; min-height: 0; }
+.arena-game .table-layout { display: grid; grid-template-columns: minmax(0,1fr) 260px; grid-template-areas: 'main aside'; grid-template-rows: minmax(0,1fr); align-items: stretch; gap: 16px; flex: 1; min-height: 0; }
 .arena-game .table-main { display: flex; flex-direction: column; min-height: 0; }
 .arena-game .table-status { flex: 0 0 40px; align-items: center; padding: 8px 16px; }
 .arena-game .felt-table { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 180px; padding: 12px; overflow: hidden; }
 .arena-game .opponents { position: absolute; inset: 0; display: block; pointer-events: none; }
-.arena-game .opponent { position: absolute; left: var(--seat-x); top: var(--seat-y); transform: translate(-50%,-50%); width: clamp(100px,17%,185px); min-width: 0; max-width: none; padding: 8px; gap: 7px; display: flex; }
+.arena-game .opponent { position: absolute; left: var(--seat-x); top: min(var(--seat-y),60%); transform: translate(-50%,-50%); width: clamp(100px,17%,185px); min-width: 0; max-width: none; padding: 8px; gap: 7px; display: flex; }
 .arena-game .opponent.active { border-color: #f3d68b; box-shadow: 0 0 0 2px #f3d68b55; }
 .arena-game .opponent .avatar { width: 25px; height: 25px; font-size: 11px; }
 .arena-game .opponent > div { flex: 1; }
@@ -209,12 +209,24 @@ body:has(.arena-game) { overflow: hidden; }
   .arena-game .round-result { grid-column: 1 / -1; }
 }
 @media (prefers-reduced-motion: reduce) { .arena-game * { animation: none !important; transition: none !important; } }
-@media (max-width: 1000px) {
-  .arena-game .hand-cards .face-card { width: max(42px,min(60px,calc((100vw - 28px)/7))); }
-}
 /* Expanded text and unusually short windows remain reachable instead of clipping. */
 @media (min-width: 1001px) and (max-height: 650px) {
   body:has(.arena-game) { overflow: auto; }
   .arena-game { min-height: 650px; overflow: visible; }
 }
 .contract-label { display: block; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: #66501e; }
+
+@media (min-width: 1001px) {
+  .home-page .setup-fields { grid-template-columns: 1fr 1fr 1fr; align-items: start; }
+  .home-page .difficulty-field { margin: 0; }
+  .home-page .difficulty-field select { max-width: none; }
+  .home-page .difficulty-field small { min-height: 36px; font-size: 11px; }
+}
+/* Preserve bid and progress information on short phones. */
+@media (max-width: 1000px) {
+  .arena-game .hand-cards .face-card { width: max(42px,min(60px,calc((100vw - 58px)/7))); }
+  .arena-game[data-phase='bidding'] .my-seat { display: flex; }
+  .arena-game[data-phase='bidding'] .opponent-score > small { display: block; }
+  .arena-game[data-phase='bidding'] .opponent-score > small:last-child { display: none; }
+  .arena-game[data-phase='bidding'] .opponent-score strong small { display: inline; }
+}
