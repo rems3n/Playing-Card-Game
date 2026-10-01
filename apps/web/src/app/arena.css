@@ -105,7 +105,8 @@ body:has(.arena-game) { overflow: hidden; }
 .arena-game .score-heading { padding: 16px; }
 .arena-game .score-heading h2 { font-size: 18px; }
 .arena-game .score-panel th,.arena-game .score-panel td { padding: 10px 8px; }
-.arena-game .score-panel th:first-child { padding-left: 14px; }
+.arena-game .score-panel th:first-child { padding-left: 16px; }
+.arena-game .score-panel th:last-child,.arena-game .score-panel td:last-child { padding-right: 16px; }
 .arena-game .score-panel tbody th { max-width: 125px; overflow-wrap: anywhere; }
 .team-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: #d5dfd6; border-block: 1px solid #d5dfd6; }
 .team-summary > div { padding: 12px; background: #edf3ed; }
