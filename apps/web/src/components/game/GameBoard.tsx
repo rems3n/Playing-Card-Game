@@ -30,6 +30,11 @@ const suits: Record<string, string> = {
 const ranks: Record<number, string> = { 11: "J", 12: "Q", 13: "K", 14: "A" };
 const label = (c: Card) => `${ranks[c.rank] ?? c.rank} of ${suits[c.suit]}`;
 const key = (c: Card) => `${c.rank}${c.suit}`;
+function seatPosition(seat: number, mine: number, count: number, inner = false): CSSProperties {
+  const relative = (seat - mine + count) % count;
+  const angle = Math.PI / 2 + relative * Math.PI * 2 / count;
+  return { "--seat-x": `${50 + Math.cos(angle) * (inner ? 26 : 39)}%`, "--seat-y": `${50 + Math.sin(angle) * (inner ? 28 : 36)}%` } as CSSProperties;
+}
 function Face({ card }: { card: Card }) {
   return (
     <>
@@ -50,15 +55,17 @@ function TrickCards({
   players,
   mySeat,
   winningSeat,
+  spatial = false,
 }: {
   cards: PlayedCard[];
   players: VisiblePlayerState[];
   mySeat: number;
   winningSeat?: number;
+  spatial?: boolean;
 }) {
   return (
     <div
-      className="trick-cards"
+      className={`trick-cards ${spatial ? "spatial-trick" : ""}`}
       role="group"
       aria-label="Cards played in this trick"
     >
@@ -66,6 +73,7 @@ function TrickCards({
         <div
           className={`trick-play ${play.seatIndex === winningSeat ? "trick-winner" : ""}`}
           key={play.seatIndex}
+          style={spatial ? seatPosition(play.seatIndex, mySeat, players.length, true) : undefined}
         >
           <div
             className={`face-card ${["H", "D"].includes(play.card.suit) ? "red" : ""}`}
@@ -273,6 +281,9 @@ function FamilyTable() {
   const winners = state.players.filter((p) => scores[p.seatIndex] === best);
   const handBest = Math.max(...state.roundScores);
   const handWinners = state.players.filter((p) => state.roundScores[p.seatIndex] === handBest);
+  const teamGame = state.gameType === GameType.Spades || (state.gameType === GameType.FortyFives && state.players.length > 2);
+  const practice = state.players.filter(p => !p.isAI).length === 1;
+  const bidText = (seat: number) => state.bids?.[seat] === -1 ? "Pass" : state.bids?.[seat] ?? "—";
   const scorePanel = (
 <section className="panel score-panel">
             <div className="score-heading">
@@ -280,9 +291,13 @@ function FamilyTable() {
               <span>
                 {state.gameType === GameType.FortyFives
                   ? `Five a trick · first to ${state.config.targetScore}`
-                  : "Exact bid: 10 + tricks"}
+                  : state.gameType === GameType.Spades ? "Team target: 500 points"
+                  : state.gameType === GameType.Hearts ? "Lowest score wins" : "Exact bid: 10 + tricks"}
               </span>
             </div>
+            {teamGame && <div className="team-summary" aria-label="Team scores">
+              {[state.mySeat % 2, 1 - state.mySeat % 2].map((team, i) => <div key={team}><span>{i === 0 ? "Your team" : "Opponents"}</span><strong>{scores[team] ?? 0}</strong></div>)}
+            </div>}
             <table>
               <thead>
                 <tr>
@@ -329,7 +344,7 @@ familyGame && !done && (
                   setPending(true);
                   socket.emit("game:set_auto_deal", { gameId: gameId!, enabled: event.target.checked });
                 }} />
-              <span>Automatically deal the next hand <small>Applies to this table for the rest of this game. Turn off anytime.</small></span>
+              <span>Automatically deal the next hand <small>Table setting · 5-second pause between hands</small></span>
             </label>
           )
   );
@@ -340,14 +355,14 @@ familyGame && !done && (
   }
   return (
     <div
-      className="game-page"
+      className="game-page arena-game"
       data-phase={state.phase}
       data-round={state.roundNumber}
       data-players={state.players.length}
     >
       <div className="game-heading">
         <div>
-          <p className="eyebrow">{state.players.length} PLAYERS</p>
+          <Link className="table-brand" href="/" aria-label="CardArena home">♠ CardArena</Link>
           <h1>{name}</h1>
         </div>
         <div className="game-heading-actions">
@@ -361,13 +376,11 @@ familyGame && !done && (
           <button className="button secondary desktop-table-action" onClick={() => setRules(true)}>
             Rules
           </button>
-          <button className="button secondary desktop-table-action" onClick={() => setLeave(true)}>
-            Leave table
-          </button>
+
           {/* On a phone the call panel is not drawn until it is opened, so
               without this the only way to start a call is to find it inside
               the Table menu. Desktop already shows the panel's own toggle. */}
-          {mediaConfig?.enabled && (
+          {mediaConfig?.enabled && !practice && (
             <button
               className="button secondary mobile-table-action"
               aria-expanded={callOpen}
@@ -377,7 +390,7 @@ familyGame && !done && (
               {callOpen ? "Hide call" : media.status === "connected" ? "Show call" : "Call"}
             </button>
           )}
-          <button className="button secondary mobile-table-action" onClick={() => setMenuOpen(true)} aria-label="Table menu: scores and settings">Table</button>
+          <button className="button secondary table-menu-button" onClick={() => setMenuOpen(true)} aria-label="Table menu: scores and settings">Table</button>
         </div>
       </div>
       {!connection.connected && (
@@ -497,20 +510,45 @@ familyGame && !done && (
                 setPending(true);
                 socket.emit("game:deal_next", { gameId: gameId!, roundNumber: state.roundNumber });
               }}>{pending ? "Dealing…" : "Deal next hand"}</button>
+              {autoDealControl}
             </section>
           )}
           <div className="felt-table">
+          {familyGame && (trumpCard || state.trumpSuit) && (
+            <section className="trump-panel table-trump" aria-label="Trump for this hand" title={state.gameType === GameType.SevenSix ? "Set aside for this hand. No player can hold it." : `Contract: ${state.contract ?? "—"} · ${declarer?.displayName ?? ""}`}>
+              {trumpCard && (
+                <div className={`face-card ${["H", "D"].includes(trumpCard.suit) ? "red" : ""}`}
+                  role="img" aria-label={`Trump card: ${label(trumpCard)}`}>
+                  <Face card={trumpCard} />
+                </div>
+              )}
+              <div>
+                <p className="eyebrow">TRUMP</p>
+                <h2>{state.trumpSuit ? `${symbols[state.trumpSuit]} ${suits[state.trumpSuit]}` : trumpCard ? label(trumpCard) : "Choosing trump"}</h2>
+                {state.gameType === GameType.FortyFives && declarer && <small className="contract-label">{declarer.seatIndex === state.mySeat ? "You" : declarer.displayName} · {state.contract}</small>}
+                <p className="trump-detail">{state.gameType === GameType.SevenSix
+                  ? `${trumpCard ? label(trumpCard) + " · " : ""}Set aside for this hand. No player can hold it.`
+                  : declarer
+                    ? `${declarer.seatIndex === state.mySeat ? "You" : declarer.displayName} won the auction at ${state.contract} and named it. The 5, the jack and the ace of hearts are the top three trumps.`
+                    : "The 5, the jack and the ace of hearts are the top three trumps."}</p>
+              </div>
+            </section>
+          )}
+
             <div className="opponents">
               {state.players
                 .filter((p) => p.seatIndex !== state.mySeat)
+                .sort((a, b) => (a.seatIndex - state.mySeat + state.players.length) % state.players.length - (b.seatIndex - state.mySeat + state.players.length) % state.players.length)
                 .map((p) => (
                   <div
                     key={p.seatIndex}
+                    style={seatPosition(p.seatIndex, state.mySeat, state.players.length)}
                     className={`opponent ${state.currentPlayerSeat === p.seatIndex && !done && !reviewing && !roundOver ? "active" : ""} ${completed?.winningSeat === p.seatIndex ? "won-trick" : ""}`}
                   >
                     <span className="avatar">{p.displayName[0]}</span>
                     <div>
-                      <strong>{p.displayName}</strong>
+                      <strong title={p.displayName}>{p.displayName}</strong>
+                      {teamGame && p.seatIndex % 2 === state.mySeat % 2 && <span className="partner-label">Partner</span>}
                       <small>
                         {p.isAI
                           ? "Bot"
@@ -527,9 +565,8 @@ familyGame && !done && (
                       className="opponent-score"
                       aria-label={`${p.displayName}: ${p.tricksWon} tricks, ${scores[p.seatIndex]} points`}
                     >
-                      <strong>
-                        {p.tricksWon} <small>tricks</small>
-                      </strong>
+                      <strong>{p.tricksWon} <small>tricks</small></strong>
+                      {state.bids && <small>Bid {bidText(p.seatIndex)}</small>}
                       <small>{scores[p.seatIndex]} pts</small>
                     </span>
                   </div>
@@ -571,24 +608,6 @@ familyGame && !done && (
                     )}
                   </section>
                 </div>
-              ) : state.phase === GamePhase.Bidding && !done ? (
-                <div className="bid-surface">
-                  <BiddingPanel
-                    key={`${state.roundNumber}:${state.currentPlayerSeat}:${state.declarerSeat}`}
-                    gameState={state}
-                    pending={pending || !connection.connected}
-                    onBid={(bid) => {
-                      if (pending || !connection.connected) return;
-                      setPending(true);
-                      socket.emit("game:bid", { gameId: gameId!, bid });
-                    }}
-                    onCallTrump={(suit) => {
-                      if (pending || !connection.connected) return;
-                      setPending(true);
-                      socket.emit("game:call_trump", { gameId: gameId!, suit });
-                    }}
-                  />
-                </div>
               ) : state.currentTrick.length ? (
                 <div
                   className="trick-display"
@@ -607,6 +626,7 @@ familyGame && !done && (
                     players={state.players}
                     mySeat={state.mySeat}
                     winningSeat={completed?.winningSeat}
+                    spatial
                   />
                 </div>
               ) : (
@@ -631,11 +651,31 @@ familyGame && !done && (
                 <span className="dealer-tag">DEALER</span>
               )}
               <span className="my-score">
-                {me?.tricksWon ?? 0} tricks · {scores[state.mySeat]} points
+                {state.bids && <>Bid {bidText(state.mySeat)} · </>}Won {me?.tricksWon ?? 0} · {scores[state.mySeat]} points
               </span>
             </div>
           </div>
           {!roundOver && !done && <div className="hand-panel">
+            {state.phase === GamePhase.Bidding && <div className="hand-bidding">
+                <div className="bid-surface">
+                  <BiddingPanel
+                    key={`${state.roundNumber}:${state.currentPlayerSeat}:${state.declarerSeat}`}
+                    gameState={state}
+                    pending={pending || !connection.connected}
+                    onBid={(bid) => {
+                      if (pending || !connection.connected) return;
+                      setPending(true);
+                      socket.emit("game:bid", { gameId: gameId!, bid });
+                    }}
+                    onCallTrump={(suit) => {
+                      if (pending || !connection.connected) return;
+                      setPending(true);
+                      socket.emit("game:call_trump", { gameId: gameId!, suit });
+                    }}
+                  />
+                </div>
+</div>}
+
             <div className="hand-heading">
               <strong>
                 Your hand <span>· {state.myHand.length} cards</span>
@@ -685,57 +725,39 @@ familyGame && !done && (
                   : selected
                   ? label(selected)
                   : myTurn && playing
-                    ? "Highlighted cards are legal moves."
+                    ? state.currentTrick.length && state.myHand.some(c => c.suit === state.currentTrick[0].card.suit)
+                      ? `Follow ${suits[state.currentTrick[0].card.suit]}.` : "Choose a card to play."
                     : state.phase === GamePhase.Bidding
                       ? "Use your hand to decide your bid."
                       : "Waiting for your turn."}
               </p>
-              <button
+              {state.phase !== GamePhase.Bidding && <button
                 className="button primary"
                 disabled={!selected || !myTurn || !playing || pending}
                 onClick={play}
               >
-                {pending ? "Sending…" : "Play card"} <span aria-hidden>↑</span>
-              </button>
+                {pending ? "Sending…" : selected ? `Play ${ranks[selected.rank] ?? selected.rank}${symbols[selected.suit]}` : "Play card"}
+              </button>}
             </div>
           </div>}
         </section>
-          {familyGame && (trumpCard || state.trumpSuit) && (
-            <section className="trump-panel" aria-label="Trump for this hand">
-              {trumpCard && (
-                <div className={`face-card ${["H", "D"].includes(trumpCard.suit) ? "red" : ""}`}
-                  role="img" aria-label={`Trump card: ${label(trumpCard)}`}>
-                  <Face card={trumpCard} />
-                </div>
-              )}
-              <div>
-                <p className="eyebrow">TRUMP</p>
-                <h2>{state.trumpSuit ? `${symbols[state.trumpSuit]} ${suits[state.trumpSuit]}` : trumpCard ? label(trumpCard) : "Choosing trump"}</h2>
-                <p>{state.gameType === GameType.SevenSix
-                  ? `${trumpCard ? label(trumpCard) + " · " : ""}Set aside for this hand. No player can hold it.`
-                  : declarer
-                    ? `${declarer.seatIndex === state.mySeat ? "You" : declarer.displayName} won the auction at ${state.contract} and named it. The 5, the jack and the ace of hearts are the top three trumps.`
-                    : "The 5, the jack and the ace of hearts are the top three trumps."}</p>
-              </div>
-            </section>
-          )}
-        {autoDealControl}
         <aside className="table-aside">
-          <MediaPanel
+          {!practice && <MediaPanel
             media={media}
             currentPlayerSeat={state.currentPlayerSeat}
             open={callOpen}
             onOpenChange={setCallOpen}
-          />
+          />}
           {scorePanel}
-          <details className="panel chat-details">
+          {!practice && <details className="panel chat-details">
             <summary>Table chat</summary>
             <ChatPanel />
-          </details>
+          </details>}
+          <details className="panel table-settings"><summary>Table settings</summary>{autoDealControl}<button className="button secondary" onClick={() => setLeave(true)}>Leave table</button></details>
           <p className="table-tip">
             {state.gameType === GameType.SevenSix
               ? "Make your bid exactly to earn a bonus. The dealer cannot make the total bids equal the number of tricks."
-              : "The five of trump is the highest card, then the jack of trump, then the ace of hearts — which is trump in every suit."}
+              : state.gameType === GameType.FortyFives ? "Trump ranking: 5, J, then A♥. Open Rules for the full ranking." : state.gameType === GameType.Hearts ? "Avoid hearts and Q♠. Lowest score wins." : "Spades are always trump. Your team must make its combined bid."}
           </p>
         </aside>
       </div>
@@ -745,7 +767,7 @@ familyGame && !done && (
           {scorePanel}
           {autoDealControl}
           <div className="table-menu-actions">
-            {mediaConfig?.enabled && (
+            {mediaConfig?.enabled && !practice && (
               <button className="button secondary" onClick={() => { setMenuOpen(false); setCallOpen(true); }}>
                 {media.status === "connected" ? "Show call" : "Call"}
               </button>
@@ -753,7 +775,7 @@ familyGame && !done && (
             <button className="button secondary" onClick={() => { setMenuOpen(false); setRules(true); }}>Rules</button>
             <button className="button secondary" onClick={() => { setMenuOpen(false); setLeave(true); }}>Leave table</button>
           </div>
-          <details className="chat-details"><summary>Table chat</summary><ChatPanel /></details>
+          {!practice && <details className="chat-details"><summary>Table chat</summary><ChatPanel /></details>}
         </section>}
       </Dialog>
       <Dialog

@@ -54,7 +54,7 @@ const measure = ([minTouch, minHandCard]) => {
   const page = d.querySelector(".game-page");
   const tracked =
     ".game-heading,.table-status,.trump-panel,.opponents,.bidding-panel," +
-    ".bid-options button,.bidding-panel button[type=submit],.hand-panel," +
+    ".bid-options .choice-content,.bidding-panel button[type=submit],.hand-panel," +
     ".hand-cards button,.hand-action button,.trick-play,.round-result," +
     ".round-result button,.my-seat";
   const targets = [...d.querySelectorAll(tracked)].filter(vis);
@@ -182,28 +182,28 @@ async function playOneCard(page, timeout = 60000) {
   const card = page.locator(".hand-cards button:not([disabled])").first();
   const name = await card.getAttribute("aria-label");
   await card.click();
-  await page.getByRole("button", { name: /Play card/ }).click();
+  await page.getByRole("button", { name: /^Play / }).click();
   return name;
 }
 
 async function startPractice(page) {
   await page.goto(BASE + "/", { waitUntil: "load" });
   // Hydration can land after first paint, so retry until the switch takes.
-  await page.getByRole("button", { name: "Practice with bots" }).click();
+  await page.getByRole("radio", { name: "Practice with bots" }).click();
   await page.waitForFunction(
     () => {
-      const b = [...document.querySelectorAll(".mode-switch button")].find((e) =>
-        e.textContent.includes("Practice"),
+      const b = [...document.querySelectorAll(".mode-choices input")].find((e) =>
+        (e.getAttribute("aria-label") || "").includes("Practice"),
       );
       if (!b) return false;
-      if (b.getAttribute("aria-pressed") === "true") return true;
+      if (b.checked) return true;
       b.click();
       return false;
     },
     null,
     { timeout: 30000, polling: 250 },
   );
-  await page.getByRole("button", { name: new RegExp(GAME.replace("/", "\\/"), "i") }).first().click();
+  await page.getByRole("radio", { name: new RegExp(GAME.replace("/", "\\/"), "i") }).first().click();
   await page.getByLabel("Your name").fill("Layout check");
   // Both games offer a seat count; 45s only allows 2, 4 and 6.
   await page.getByLabel("Seats at the table").selectOption(String(SEATS));
@@ -251,7 +251,7 @@ for (const size of sizes) {
     const submit = page.locator(".bidding-panel button[type=submit]");
     if (!(await submit.isDisabled()))
       failures.push(`${size.name} | bidding | submit is enabled before a bid is chosen`);
-    const tiles = page.locator(".bid-options button:not([disabled])");
+    const tiles = page.locator(".bid-options input:not([disabled])");
     if (await tiles.count()) {
       await tiles.first().click();
       await step("bid selected");

@@ -1,14 +1,15 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import "./arena.css";
 import { AuthProvider } from "@/components/AuthProvider";
 import { Sidebar } from "@/components/Sidebar";
 
 export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover" };
 
 export const metadata: Metadata = {
-  title: "CardArena — Seven-Six and 45s",
+  title: "CardArena — Play card games online",
   description:
-    "Play Seven-Six and 45s online. Trick-taking card games for 2 to 7 players, with friends in a private room or against bots.",
+    "Play Seven-Six, 45s, Hearts, Spades and Rummy online with friends in a private room or against bots.",
 };
 
 export default function RootLayout({

@@ -40,17 +40,17 @@ describe("Seven-Six bidding controls", () => {
     const user = userEvent.setup();
     expect(screen.queryByRole("button", { name: "Increase bid" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Decrease bid" })).toBeNull();
-    await user.click(screen.getByRole("button", { name: "Select bid 2" }));
+    await user.click(screen.getByRole("radio", { name: "Select bid 2" }));
     expect(onBid).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "Submit bid: 2" }));
+    await user.click(screen.getByRole("button", { name: "Bid 2" }));
     expect(onBid).toHaveBeenCalledExactlyOnceWith(2);
   });
   it("number buttons select a bid; Enter on Submit confirms it", async () => {
     const { onBid } = setup();
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Select bid 5" }));
+    await user.click(screen.getByRole("radio", { name: "Select bid 5" }));
     expect(onBid).not.toHaveBeenCalled();
-    const submit = screen.getByRole("button", { name: "Submit bid: 5" });
+    const submit = screen.getByRole("button", { name: "Bid 5" });
     submit.focus();
     await user.keyboard("{Enter}");
     expect(onBid).toHaveBeenCalledExactlyOnceWith(5);
@@ -60,18 +60,18 @@ describe("Seven-Six bidding controls", () => {
     const user = userEvent.setup();
     expect(
       (
-        screen.getByRole("button", {
+        screen.getByRole("radio", {
           name: "Select bid 2",
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
-    await user.click(screen.getByRole("button", { name: "Select bid 3" }));
-    await user.click(screen.getByRole("button", { name: "Submit bid: 3" }));
+    await user.click(screen.getByRole("radio", { name: "Select bid 3" }));
+    await user.click(screen.getByRole("button", { name: "Bid 3" }));
     expect(onBid).toHaveBeenCalledExactlyOnceWith(3);
-    await user.click(screen.getByRole("button", { name: "Select bid 0" }));
-    expect(screen.getByRole("button", { name: "Submit bid: 0" })).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: "Select bid 7" }));
-    expect(screen.getByRole("button", { name: "Submit bid: 7" })).toBeTruthy();
+    await user.click(screen.getByRole("radio", { name: "Select bid 0" }));
+    expect(screen.getByRole("button", { name: "Bid 0" })).toBeTruthy();
+    await user.click(screen.getByRole("radio", { name: "Select bid 7" }));
+    expect(screen.getByRole("button", { name: "Bid 7" })).toBeTruthy();
   });
   it("preselects no bid and keeps submission disabled until one is chosen", async () => {
     const { onBid } = setup();
@@ -81,23 +81,23 @@ describe("Seven-Six bidding controls", () => {
     }) as HTMLButtonElement;
     expect(submit.disabled).toBe(true);
     expect(
-      screen.queryByRole("button", { name: /Select bid \d/, pressed: true }),
+      screen.queryByRole("radio", { name: /Select bid \d/, checked: true }),
     ).toBeNull();
     await user.click(submit);
     expect(onBid).not.toHaveBeenCalled();
     fireEvent.submit(submit.closest("form")!);
     expect(onBid).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "Select bid 4" }));
+    await user.click(screen.getByRole("radio", { name: "Select bid 4" }));
     expect(
-      (screen.getByRole("button", { name: "Submit bid: 4" }) as HTMLButtonElement)
+      (screen.getByRole("button", { name: "Bid 4" }) as HTMLButtonElement)
         .disabled,
     ).toBe(false);
   });
   it("clears a selection the dealer restriction makes illegal", async () => {
     const { onBid, props, rerender } = setup({ dealerSeat: 0 });
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Select bid 3" }));
-    expect(screen.getByRole("button", { name: "Submit bid: 3" })).toBeTruthy();
+    await user.click(screen.getByRole("radio", { name: "Select bid 3" }));
+    expect(screen.getByRole("button", { name: "Bid 3" })).toBeTruthy();
     // Earlier bids now total 4, so the dealer may no longer bid 3.
     rerender(
       <BiddingPanel
@@ -124,5 +124,18 @@ describe("Seven-Six bidding controls", () => {
     setup({ currentPlayerSeat: 1 });
     expect(screen.queryByRole("button", { name: /Submit bid/ })).toBeNull();
     expect(screen.getByRole("status").textContent).toContain("Player 1");
+  });
+});
+
+describe("auction updates", () => {
+  it("does not submit a previously selected bid after it becomes illegal", async () => {
+    const { onBid, props, rerender } = setup({ gameType: GameType.FortyFives, legalBids: [15, 20, 25, 30, -1] });
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("radio", { name: "Bid 15" }));
+    rerender(<BiddingPanel {...props} gameState={{...props.gameState, legalBids: [20, 25, 30, -1]}} />);
+    const submit = screen.getByRole("button", { name: "Bid 15" });
+    expect((submit as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.submit(submit.closest("form")!);
+    expect(onBid).not.toHaveBeenCalled();
   });
 });

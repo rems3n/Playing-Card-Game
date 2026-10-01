@@ -7,6 +7,16 @@ import { AIDifficulty, GameType } from "@card-game/shared-types";
 import { useSocket } from "@/hooks/useSocket";
 import { connectPlayer, useConnection } from "@/components/ConnectionProvider";
 
+import { ChoiceGroup } from "@/components/ChoiceGroup";
+
+const games = [
+  { type: GameType.SevenSix, name: "Seven-Six", symbol: "7/6", meta: "2–7 players", copy: "Predict how many tricks you will win. Match your bid exactly for a bonus." },
+  { type: GameType.FortyFives, name: "45s", symbol: "45", meta: "2, 4 or 6 players", copy: "Bid for the right to name trump. Win tricks to reach 45 points." },
+  { type: GameType.Hearts, name: "Hearts", symbol: "♥", meta: "4 players", copy: "Avoid hearts and the queen of spades. The lowest score wins." },
+  { type: GameType.Spades, name: "Spades", symbol: "♠", meta: "4 players · pairs", copy: "Bid with your partner and win tricks with spades as trump. First team to 500 wins." },
+  { type: GameType.Rummy, name: "Rummy", symbol: "R", meta: "2–6 players", copy: "Draw and discard to make sets and runs. Empty your hand to win the round." },
+];
+
 export default function Home() {
   const router = useRouter();
   const socket = useSocket();
@@ -119,140 +129,25 @@ export default function Home() {
   }
   return (
     <div className="home-page">
-      <section className="hero">
-        <div>
-          <p className="eyebrow">CARD GAMES ONLINE</p>
-          <h1>
-            Seven-Six
-            <br />
-            and 45s.
-          </h1>
-          <p className="hero-copy">
-            Trick-taking card games for 2 to 7 players.
-            <br className="desktop-only" /> Play with friends in a private room,
-            or against bots. No account needed.
-          </p>
-          <a href="#new-game" className="text-link">
-            Start a game <span aria-hidden>↘</span>
-          </a>
-        </div>
-        <div className="hero-cards" aria-hidden>
-          <div className="hero-card red">
-            <span>
-              7<br />♥
-            </span>
-            <strong>♥</strong>
-          </div>
-          <div className="hero-card black">
-            <span>
-              A<br />♠
-            </span>
-            <strong>♠</strong>
-          </div>
-          <span className="hero-caption">Seven of hearts, ace of spades.</span>
-        </div>
+      <section className="lobby-heading">
+        <div><p className="eyebrow">PLAY ONLINE</p><h1>Choose your game</h1>
+        <p>Private tables with friends, or practice against bots. No account needed.</p></div>
+        {resume && <Link className="button secondary" href={`/game/${resume}`}>Resume game →</Link>}
       </section>
+      <ChoiceGroup name="game" label="Choose a game" value={game} onChange={setGame} className="lobby-games"
+        options={games.map(g => ({ value: g.type, label: `${g.name} ${g.meta}`, content: <><span className="game-symbol" aria-hidden>{g.symbol}</span><strong>{g.name}</strong><small>{g.meta}</small></> }))} />
+      <p className="selected-game-description" aria-live="polite">{games.find(g => g.type === game)?.copy}</p>
       <div className="home-grid">
         <section id="new-game" className="panel setup-panel">
           <div className="section-heading">
             <div>
               <p className="eyebrow">NEW GAME</p>
-              <h2>Start a game</h2>
+              <h2>Set up your table</h2>
             </div>
             <span className="small-note">No account needed</span>
           </div>
-          <div className="game-choices" role="group" aria-label="Choose a game">
-            {[
-              {
-                type: GameType.SevenSix,
-                name: "Seven-Six",
-                symbol: "7 / 6",
-                meta: "2–7 players",
-                copy: "Bid the tricks you expect to win. Make it exactly for a bonus.",
-              },
-              {
-                type: GameType.FortyFives,
-                name: "45s",
-                symbol: "45",
-                meta: "2, 4 or 6 players",
-                copy: "Bid for the right to name trump. Five a trick, first to 45.",
-              },
-            ].map((g) => (
-              <button
-                key={g.type}
-                className={`game-choice ${game === g.type ? "selected" : ""}`}
-                aria-pressed={game === g.type}
-                onClick={() => setGame(g.type)}
-              >
-                <span className="game-symbol" aria-hidden>
-                  {g.symbol}
-                </span>
-                <span className="choice-check" aria-hidden>
-                  {game === g.type ? "✓" : ""}
-                </span>
-                <strong>{g.name}</strong>
-                <small>{g.meta}</small>
-                <p>{g.copy}</p>
-              </button>
-            ))}
-          </div>
-          <p className="eyebrow other-games-heading">OTHER GAMES</p>
-          <div className="game-choices other-games" role="group" aria-label="Other games">
-            {[
-              {
-                type: GameType.Hearts,
-                name: "Hearts",
-                symbol: "\u2665",
-                meta: "4 players",
-                copy: "Avoid hearts and the queen of spades. Lowest score wins.",
-              },
-              {
-                type: GameType.Spades,
-                name: "Spades",
-                symbol: "\u2660",
-                meta: "4 players, in pairs",
-                copy: "Bid your tricks with spades as trump. First pair to 500.",
-              },
-              {
-                type: GameType.Rummy,
-                name: "Rummy",
-                symbol: "R",
-                meta: "2\u20136 players",
-                copy: "Draw and discard to lay down sets and runs. Go out to score.",
-              },
-            ].map((g) => (
-              <button
-                key={g.type}
-                className={`game-choice ${game === g.type ? "selected" : ""}`}
-                aria-pressed={game === g.type}
-                onClick={() => setGame(g.type)}
-              >
-                <span className="game-symbol" aria-hidden>
-                  {g.symbol}
-                </span>
-                <span className="choice-check" aria-hidden>
-                  {game === g.type ? "\u2713" : ""}
-                </span>
-                <strong>{g.name}</strong>
-                <small>{g.meta}</small>
-                <p>{g.copy}</p>
-              </button>
-            ))}
-          </div>
-          <div className="mode-switch" role="group" aria-label="Play mode">
-            <button
-              aria-pressed={mode === "friends"}
-              onClick={() => setMode("friends")}
-            >
-              With friends
-            </button>
-            <button
-              aria-pressed={mode === "practice"}
-              onClick={() => setMode("practice")}
-            >
-              Practice with bots
-            </button>
-          </div>
+          <ChoiceGroup name="mode" label="Play mode" value={mode} onChange={setMode} className="mode-choices"
+            options={[{value: "friends", label: "With friends"}, {value: "practice", label: "Practice with bots"}]} />
           <div className="setup-fields">
             <label>
               Your name
@@ -327,9 +222,6 @@ export default function Home() {
         </section>
         <aside className="home-aside">
           <section className="panel join-panel">
-            <span className="round-icon" aria-hidden>
-              ↗
-            </span>
             <h2>Join a game</h2>
             <p>Enter the 8-character room code you were sent.</p>
             <form
@@ -361,17 +253,12 @@ export default function Home() {
             <span className="eyebrow">RULES</span>
             <h2>How to play</h2>
             <p>
-              Bidding, trick-taking and scoring, for both games.
+              Rules, scoring, and card rankings for all five games.
             </p>
             <Link className="text-link" href="/rules">
               Read the rules <span aria-hidden>→</span>
             </Link>
           </section>
-          {resume && (
-            <Link className="resume-link" href={`/game/${resume}`}>
-              Return to your last game →
-            </Link>
-          )}
         </aside>
       </div>
       {!connection.connected && (
@@ -381,8 +268,8 @@ export default function Home() {
         </div>
       )}
       <footer className="home-footer">
-        <span>♣ &nbsp; Made for the games you grew up with.</span>
-        <Link href="/rules">Seven-Six &amp; 45s</Link>
+        <span>♣ &nbsp; Play cards with friends.</span>
+        <Link href="/rules">Game rules</Link>
       </footer>
     </div>
   );
