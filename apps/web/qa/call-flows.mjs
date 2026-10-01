@@ -44,9 +44,9 @@ async function newPlayer(name, viewport) {
 }
 async function hydrated(page) {
   await page.waitForFunction(() => {
-    const b = [...document.querySelectorAll(".mode-switch button")].find((e) => e.textContent.includes("friends"));
+    const b = [...document.querySelectorAll(".mode-choices input")].find((e) => (e.getAttribute("aria-label") || "").includes("friends"));
     if (!b) return false;
-    if (b.getAttribute("aria-pressed") === "true") return true;
+    if (b.checked) return true;
     b.click();
     return false;
   }, null, { timeout: 30000, polling: 250 });

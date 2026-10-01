@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ChoiceGroup } from "../ChoiceGroup";
 import type { VisibleGameState } from "@card-game/shared-types";
 import { GameType, Suit } from "@card-game/shared-types";
 
@@ -40,29 +41,8 @@ export function BiddingPanel({
               Choose how many tricks you expect to win with spades as trump.
               Your pair needs its two bids together.
             </p>
-            <div className="bid-options" role="group" aria-label="Bid options">
-              <button
-                type="button"
-                aria-label="Bid nil: no tricks"
-                aria-pressed={validBid === 0}
-                disabled={pending}
-                onClick={() => setSelectedBid(0)}
-              >
-                Nil
-              </button>
-              {Array.from({ length: 13 }, (_, i) => i + 1).map((bid) => (
-                <button
-                  type="button"
-                  key={bid}
-                  aria-label={`Bid ${bid}`}
-                  aria-pressed={bid === validBid}
-                  disabled={pending}
-                  onClick={() => setSelectedBid(bid)}
-                >
-                  {bid}
-                </button>
-              ))}
-            </div>
+            <ChoiceGroup name="bid" label="Bid options" value={validBid} onChange={setSelectedBid} className="bid-options spades-bids"
+              options={Array.from({length: 14}, (_, bid) => ({ value: bid, label: bid === 0 ? "Bid nil: no tricks" : `Bid ${bid}`, content: bid === 0 ? "Nil" : bid, disabled: pending }))} />
             <button
               className="button primary full"
               type="submit"
@@ -74,8 +54,8 @@ export function BiddingPanel({
                 : validBid === null
                   ? "Submit bid"
                   : validBid === 0
-                    ? "Submit bid: nil"
-                    : `Submit bid: ${validBid}`}
+                    ? "Bid nil"
+                    : `Bid ${validBid}`}
             </button>
           </form>
         ) : (
@@ -118,27 +98,11 @@ export function BiddingPanel({
             }}
           >
             <p id="bid-help">
-              Choose how many tricks you expect to win, then submit your bid.
+              How many tricks will you win?
             </p>
-            <div className="bid-options" role="group" aria-label="Bid options">
-              {Array.from({ length: handSize + 1 }, (_, bid) => (
-                <button
-                  type="button"
-                  key={bid}
-                  aria-label={`Select bid ${bid}`}
-                  aria-pressed={bid === validBid}
-                  disabled={pending || bid === restrictedBid}
-                  title={
-                    bid === restrictedBid
-                      ? "The dealer cannot make total bids equal the number of tricks."
-                      : undefined
-                  }
-                  onClick={() => setSelectedBid(bid)}
-                >
-                  {bid}
-                </button>
-              ))}
-            </div>
+            <ChoiceGroup name="bid" label="Bid options" value={validBid} onChange={setSelectedBid} className="bid-options seven-six-bids"
+              options={Array.from({length: handSize + 1}, (_, bid) => ({ value: bid, label: `Select bid ${bid}`, content: bid, disabled: pending || bid === restrictedBid,
+                title: bid === restrictedBid ? "The dealer cannot make total bids equal the number of tricks." : undefined }))} />
             {isDealer && restrictedBid >= 0 && restrictedBid <= handSize && (
               <p className="bid-restriction">
                 As dealer, you cannot bid {restrictedBid}: total bids cannot
@@ -155,7 +119,7 @@ export function BiddingPanel({
                 ? "Submitting…"
                 : validBid === null
                   ? "Submit bid"
-                  : `Submit bid: ${validBid}`}
+                  : `Bid ${validBid}`}
             </button>
           </form>
         ) : (
@@ -235,7 +199,7 @@ export function BiddingPanel({
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            if (!pending && selectedBid !== null) onBid(selectedBid);
+            if (!pending && selectedBid !== null && legalBids.includes(selectedBid)) onBid(selectedBid);
           }}
         >
           <p id="bid-help">
@@ -243,20 +207,8 @@ export function BiddingPanel({
               ? `The bid stands at ${standing}. Bid higher or pass.`
               : "Bid the points you expect to take, or pass. Each trick is worth 5, and the highest trump is worth 5 more."}
           </p>
-          <div className="bid-options" role="group" aria-label="Bid options">
-            {[15, 20, 25, 30].map((bid) => (
-              <button
-                type="button"
-                key={bid}
-                aria-label={`Bid ${bid}`}
-                aria-pressed={bid === selectedBid}
-                disabled={pending || !legalBids.includes(bid)}
-                onClick={() => setSelectedBid(bid)}
-              >
-                {bid}
-              </button>
-            ))}
-          </div>
+          <ChoiceGroup name="bid" label="Bid options" value={selectedBid} onChange={setSelectedBid} className="bid-options forty-fives-bids"
+            options={[15, 20, 25, 30].map(bid => ({value: bid, label: `Bid ${bid}`, content: bid, disabled: pending || !legalBids.includes(bid)}))} />
           <button
             className="button primary full"
             type="submit"
@@ -267,7 +219,7 @@ export function BiddingPanel({
               ? "Submitting\u2026"
               : selectedBid === null
                 ? "Submit bid"
-                : `Submit bid: ${selectedBid}`}
+                : `Bid ${selectedBid}`}
           </button>
           <button
             type="button"

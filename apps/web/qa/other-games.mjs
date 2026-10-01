@@ -25,9 +25,9 @@ const check = (ok, what) => {
 
 async function hydrated(page) {
   await page.waitForFunction(() => {
-    const b = [...document.querySelectorAll(".mode-switch button")].find((e) => e.textContent.includes("Practice"));
+    const b = [...document.querySelectorAll(".mode-choices input")].find((e) => (e.getAttribute("aria-label") || "").includes("Practice"));
     if (!b) return false;
-    if (b.getAttribute("aria-pressed") === "true") return true;
+    if (b.checked) return true;
     b.click();
     return false;
   }, null, { timeout: 30000, polling: 250 });
@@ -62,7 +62,7 @@ async function start(page, name) {
   if (laidOut !== asked) check(false, `${name} lobby: laid out ${laidOut}px wide on a ${asked}px screen`);
   // By the game's own name, exactly: Hearts' blurb mentions the queen of
   // spades, and a loose match once played Hearts when Spades was asked for.
-  await page.locator(".game-choice").filter({ has: page.locator("strong", { hasText: new RegExp(`^${name}$`) }) }).first().click();
+  await page.locator(".lobby-games .choice-option").filter({ has: page.locator("strong", { hasText: new RegExp(`^${name}$`) }) }).first().click();
   await page.getByLabel("Your name").fill("Other games");
   await page.getByLabel(/Bot difficulty/).selectOption("expert");
   await page.getByRole("button", { name: /Start practice/i }).click();
@@ -98,7 +98,7 @@ async function trickGame(page, name, label) {
       const mine = await page.locator(".bidding-panel form").count();
       if (mine) {
         for (const f of await layout(page, `${label} bidding`, name)) check(false, f);
-        await page.locator(".bid-options button:not([disabled])").nth(2).click();
+        await page.locator(".bid-options input:not([disabled])").nth(2).click();
         await page.locator(".bidding-panel button[type=submit]").click();
       }
       await page.waitForTimeout(700);
@@ -110,7 +110,7 @@ async function trickGame(page, name, label) {
       const legal = page.locator(".hand-cards button:not([disabled])");
       if (await legal.count()) {
         await legal.first().click({ position: { x: 8, y: 24 } });
-        await page.getByRole("button", { name: "Play card" }).click();
+        await page.getByRole("button", { name: /^Play / }).click();
         played++;
         if (played >= 3) break;
       }

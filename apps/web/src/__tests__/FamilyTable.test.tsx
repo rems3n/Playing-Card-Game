@@ -94,7 +94,7 @@ describe("family table interactions", () => {
   it("selects then plays once and disables repeated submissions until confirmed", () => {
     render(<GameBoard />);
     fireEvent.click(screen.getByRole("button", { name: "A of spades" }));
-    fireEvent.click(screen.getByRole("button", { name: "Play card" }));
+    fireEvent.click(screen.getByRole("button", { name: "Play A♠" }));
     fireEvent.click(screen.getByRole("button", { name: "Sending…" }));
     expect(transport.emit).toHaveBeenCalledExactlyOnceWith("game:play_card", {
       gameId: "test-game",
@@ -127,7 +127,7 @@ describe("family table interactions", () => {
       screen.getByRole("img", { name: "A of spades, winning card" }),
     ).toBeTruthy();
     expect(screen.getByText("You win this trick")).toBeTruthy();
-    expect(screen.getByText("1 tricks · 20 points")).toBeTruthy();
+    expect(screen.getByText("Bid 1 · Won 1 · 20 points")).toBeTruthy();
     expect(
       (screen.getByRole("button", { name: "Play card" }) as HTMLButtonElement)
         .disabled,
@@ -296,6 +296,7 @@ describe("trump and next-hand controls", () => {
   });
   it("can toggle auto-deal on and off during play", () => {
     render(<GameBoard />);
+    fireEvent.click(screen.getByText("Table settings"));
     fireEvent.click(screen.getByRole("checkbox", { name: /Automatically deal/ }));
     expect(transport.emit).toHaveBeenLastCalledWith("game:set_auto_deal", { gameId: "test-game", enabled: true });
     receive({ ...initial(), autoDeal: true });
@@ -319,6 +320,9 @@ describe("compact table menu", () => {
   it("offers the call from the table itself, not only from the menu", async () => {
     const user = userEvent.setup();
     mediaEnabled.value = true;
+    const multiplayer = initial();
+    multiplayer.players[1].isAI = false;
+    useGameStore.getState().setGameState(multiplayer);
     render(<GameBoard />);
     // A phone never draws the call panel until it is opened, so the entry has
     // to be on the table or nobody finds it.
@@ -347,6 +351,9 @@ describe("compact table menu", () => {
 
     cleanup();
     mediaEnabled.value = true;
+    const multiplayer = initial();
+    multiplayer.players[1].isAI = false;
+    useGameStore.getState().setGameState(multiplayer);
     render(<GameBoard />);
     await user.click(screen.getByRole("button", { name: /Table menu/i }));
     // Scoped to the menu: the panel's own toggle is also called Call.

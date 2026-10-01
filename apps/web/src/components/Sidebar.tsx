@@ -14,7 +14,7 @@ export function Sidebar() {
         <span className="brand-mark" aria-hidden>
           ♠
         </span>{" "}
-        CardArena<span className="brand-note">SEVEN-SIX AND 45s</span>
+        CardArena<span className="brand-note">ONLINE CARD GAMES</span>
       </Link>
       <nav aria-label="Main navigation">
         {[
